@@ -1,0 +1,17 @@
+* Install dependencies
+#+begin_src shell
+  - wm: i3-gaps i3lock
+  - status bar: polybar
+  - application launcher: dmenu
+  - compositor: picom
+  - notify daemon: dunst
+  - terminal: alacritty tmux
+  - input method: fcitx5 fcitx5-rime fcitx5-mozc fcitx5-qt fcitx5-gtk
+#+end_src
+
+
+* Windows compatible
+** keymap
+- powertoys:
+  - Alt_R <-> Super_L
+  - Caps <-> Ctrl_L
