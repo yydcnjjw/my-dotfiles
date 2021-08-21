@@ -1,2 +1,2 @@
-remove mod1 = Ctrl_R
-add mod4 = Ctrl_R
+remove control = Control_R
+add mod4 = Control_R
