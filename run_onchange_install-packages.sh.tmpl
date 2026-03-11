@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# Pre-request sudo privileges and keep them active in the background
+echo "Requesting sudo privileges to install system dependencies..."
+sudo -v
+# Keep sudo session alive until this script finishes
+while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
+
+{{- if eq .chezmoi.osRelease.id "arch" }}
+# Install necessary system packages
+# This script is automatically executed by chezmoi when dependencies change
+
+set -euo pipefail
+
+echo "Arch Linux detected, preparing to check and install necessary system dependencies..."
+
+PACKAGES=(
+    "zsh"
+    "tmux"
+    "git"
+    "fzf"
+    "unzip"
+    "tar"
+    "curl"
+    "wget"
+    "base-devel"
+)
+
+# Check missing packages
+MISSING_PACKAGES=()
+for pkg in "${PACKAGES[@]}"; do
+    if ! pacman -Qs "^${pkg}$" > /dev/null; then
+        MISSING_PACKAGES+=("$pkg")
+    fi
+done
+
+if [ ${#MISSING_PACKAGES[@]} -ne 0 ]; then
+    echo "Installing missing packages: ${MISSING_PACKAGES[*]}"
+    sudo pacman -S --noconfirm "${MISSING_PACKAGES[@]}"
+else
+    echo "All necessary packages are already installed, skipping."
+fi
+
+# Check and configure locale to prevent perl warning (Arch Linux)
+if ! locale -a | grep -i en_US.utf8 > /dev/null; then
+    echo "Configuring locale (en_US.UTF-8)..."
+    sudo sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+    sudo locale-gen
+fi
+
+
+{{- else if or (eq .chezmoi.osRelease.id "ubuntu") (eq .chezmoi.osRelease.id "debian") }}
+
+set -euo pipefail
+
+echo "Debian/Ubuntu detected, preparing to check and install necessary system dependencies..."
+
+PACKAGES=(
+    "zsh"
+    "tmux"
+    "git"
+    "fzf"
+    "unzip"
+    "tar"
+    "curl"
+    "wget"
+    "build-essential"
+)
+
+# Ensure package lists are up to date
+sudo apt-get update -qq
+
+# Check and install missing packages
+MISSING_PACKAGES=()
+for pkg in "${PACKAGES[@]}"; do
+    if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+        MISSING_PACKAGES+=("$pkg")
+    fi
+done
+
+if [ ${#MISSING_PACKAGES[@]} -ne 0 ]; then
+    echo "Installing missing packages: ${MISSING_PACKAGES[*]}"
+    sudo apt-get install -y "${MISSING_PACKAGES[@]}"
+else
+    echo "All necessary packages are already installed, skipping."
+fi
+
+# Check and configure locale (Debian/Ubuntu)
+if ! locale -a | grep -i en_US.utf8 > /dev/null; then
+    echo "Configuring locale (en_US.UTF-8)..."
+    sudo apt-get install -y locales
+    sudo locale-gen en_US.UTF-8
+    sudo update-locale LANG=en_US.UTF-8
+fi
+
+{{- else }}
+echo "Unknown package manager environment, skipping automatic system package installation. Please manually install dependencies like zsh, tmux, fzf, git, etc."
+{{- end }}
+
+# Check current login shell, modify if not Zsh (applicable on all systems)
+if command -v zsh >/dev/null 2>&1; then
+    ZSH_PATH=$(command -v zsh)
+    # Get the actual default login shell for the current user
+    USER_SHELL=$(getent passwd "$USER" | cut -d: -f7)
+    
+    # Only change if the current login shell does not end with "zsh"
+    if [[ "$USER_SHELL" != *"/zsh" ]]; then
+        echo "Changing default shell to Zsh ($ZSH_PATH)..."
+        sudo chsh -s "$ZSH_PATH" "$USER" || chsh -s "$ZSH_PATH" || echo "Failed to change shell, manual intervention might be required"
+    else
+        echo "Default shell is already Zsh ($USER_SHELL), skipping shell change."
+    fi
+fi
