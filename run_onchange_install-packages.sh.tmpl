@@ -24,6 +24,11 @@ PACKAGES=(
     "curl"
     "wget"
     "base-devel"
+    "zoxide"
+    "eza"
+    "bat"
+    "fd"
+    "ripgrep"
 )
 
 # Check missing packages
@@ -65,6 +70,10 @@ PACKAGES=(
     "curl"
     "wget"
     "build-essential"
+    "zoxide"
+    "bat"
+    "fd-find"
+    "ripgrep"
 )
 
 # Ensure package lists are up to date
@@ -83,6 +92,16 @@ if [ ${#MISSING_PACKAGES[@]} -ne 0 ]; then
     sudo apt-get install -y "${MISSING_PACKAGES[@]}"
 else
     echo "All necessary packages are already installed, skipping."
+fi
+
+# Ubuntu doesn't always have eza in default apt repos, try to install via cargo if needed or apt if available
+if ! command -v eza >/dev/null 2>&1; then
+    echo "Installing eza..."
+    sudo mkdir -p /etc/apt/keyrings
+    wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg --yes
+    echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://apt.fury.io/gierens/ /" | sudo tee /etc/apt/sources.list.d/gierens.list
+    sudo apt-get update -qq
+    sudo apt-get install -y eza
 fi
 
 # Check and configure locale (Debian/Ubuntu)

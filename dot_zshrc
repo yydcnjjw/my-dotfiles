@@ -72,7 +72,6 @@ zstyle ':omz:update' mode disabled  # disable automatic updates
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(
   git
-  z
   extract
   fzf
   fzf-tab
@@ -110,6 +109,25 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
+
+# Modern Coreutils Aliases
+if command -v eza >/dev/null 2>&1; then
+  alias ls='eza --icons'
+  alias ll='eza -alF --icons'
+  alias la='eza -a --icons'
+  alias l='eza -F --icons'
+fi
+
+if command -v bat >/dev/null 2>&1; then
+  alias cat='bat'
+elif command -v batcat >/dev/null 2>&1; then
+  alias cat='batcat'
+fi
+
+# Zoxide Initialization (replacing z plugin)
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init zsh)"
+fi
 
 # Auto-start and attach to tmux
 if [ -z "$TMUX" ] && [ -n "$PS1" ]; then
