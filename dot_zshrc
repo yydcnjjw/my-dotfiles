@@ -107,6 +107,6 @@ source $ZSH/oh-my-zsh.sh
 
 # Auto-start and attach to tmux
 if [ -z "$TMUX" ] && [ -n "$PS1" ]; then
-    tmux new-session -A -s default
+    tmux new-session -A -s "$USER"
 fi
 
