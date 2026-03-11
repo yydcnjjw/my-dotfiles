@@ -5,8 +5,8 @@ Documentation=man:tmux(1)
 [Service]
 Type=forking
 Environment=DISPLAY=:0
-ExecStart=/usr/bin/tmux new-session -s default -d
-ExecStop=/usr/bin/tmux kill-session -t default
+ExecStart=/usr/bin/tmux new-session -s %u -d
+ExecStop=/usr/bin/tmux kill-session -t %u
 
 [Install]
 WantedBy=default.target
