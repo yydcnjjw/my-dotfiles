@@ -75,7 +75,8 @@ plugins=(
   extract
   archlinux
   docker
-  eza
+  eza    # for ls
+  zoxide # for z
   fzf
   fzf-tab
   zsh-autosuggestions
@@ -117,11 +118,6 @@ if command -v bat >/dev/null 2>&1; then
   alias cat='bat'
 elif command -v batcat >/dev/null 2>&1; then
   alias cat='batcat'
-fi
-
-# Zoxide Initialization (replacing z plugin)
-if command -v zoxide >/dev/null 2>&1; then
-  eval "$(zoxide init zsh)"
 fi
 
 # Auto-start and attach to tmux
