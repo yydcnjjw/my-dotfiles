@@ -1,0 +1,12 @@
+font=Hack 10
+layer=top
+anchor=top-right
+border-size=2
+border-color=#3b8eea
+background-color=#1e1e1e
+text-color=#cccccc
+width=300
+height=100
+margin=10
+padding=10
+default-timeout=5000
