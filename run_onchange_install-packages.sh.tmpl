@@ -17,37 +17,40 @@ echo "Arch Linux detected, preparing to check and install necessary system depen
 PACKAGES=(
     "zsh"
     "tmux"
-    "git"
     "git-lfs"
     "fzf"
     "unzip"
     "tar"
     "curl"
     "wget"
-    "base-devel"
     "zoxide"
     "eza"
     "bat"
     "fd"
     "ripgrep"
-    "xdg-utils"
-    "age"
+
     "fcitx5-im"
     "fcitx5-rime"
-
     "noto-fonts-cjk"
     "noto-fonts-emoji"
-    "ttf-hack"
     "ttf-hack-nerd"
     "ttf-lxgw-wenkai"
     "fcitx5-skin-fluentdark-git"
 
     "flameshot"
-    "xdg-desktop-portal"
     "xdg-desktop-portal-wlr"
 
+    # sway tools
+    "sway"
+    "alacritty"
+    "fuzzel"
+    "swayidle"
+    "swaylock"
+    "wayvnc"
+    "wl-clipboard"
+
     # network tools
-    "openbsd-netcat"
+    "openssh"
 
     # notification
     "mako"
@@ -85,21 +88,46 @@ echo "Debian/Ubuntu detected, preparing to check and install necessary system de
 PACKAGES=(
     "zsh"
     "tmux"
-    "git"
     "git-lfs"
     "fzf"
     "unzip"
     "tar"
     "curl"
     "wget"
-    "build-essential"
     "zoxide"
     "bat"
     "fd-find"
     "ripgrep"
-    "xdg-utils"
-    "age"
-    "netcat-openbsd"
+
+    # sway tools
+    "sway"
+    "alacritty"
+    "fuzzel"
+    "swayidle"
+    "swaylock"
+    "wayvnc"
+    "wl-clipboard"
+
+    # network tools
+    "openssh-server"
+
+    # input method
+    "fcitx5-rime"
+    "fcitx5-frontend-all"
+
+    # fonts
+    "fonts-noto-cjk"
+    "fonts-noto-color-emoji"
+    "fonts-hack-ttf"
+
+    # notification
+    "mako-notifier"
+
+    # screenshot
+    "flameshot"
+
+    # xdg portal
+    "xdg-desktop-portal-wlr"
 )
 
 # Ensure package lists are up to date
