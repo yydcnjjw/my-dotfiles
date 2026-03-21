@@ -1,4 +1,5 @@
 Host *
     ServerAliveInterval 60
     ServerAliveCountMax 3
+    ProxyCommand nc -X 5 -x 127.0.0.1:8888 %h %p
 
