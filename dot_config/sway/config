@@ -211,7 +211,7 @@ bindsym $mod+r mode "resize"
     bindsym --locked XF86MonBrightnessDown exec brightnessctl set 5%-
     bindsym --locked XF86MonBrightnessUp exec brightnessctl set 5%+
     # Special key to take a screenshot with grim
-    bindsym Print exec grim
+    bindsym $mod+Shift+Print exec flameshot gui
 
 #
 # Status Bar:
@@ -238,8 +238,8 @@ default_border pixel 1px
 hide_edge_borders smart
 titlebar_border_thickness 0
 
-# TODO:
-# xdg-desktop-portal xdg-desktop-portal-wlr
 for_window [app_id="flameshot"] border pixel 0, floating enable, fullscreen disable, move absolute position 0 0
+for_window [app_id="org.fcitx.fcitx5-config-qt"] floating enable
 
+exec fcitx5 -d
 exec wayvnc 0.0.0.0
