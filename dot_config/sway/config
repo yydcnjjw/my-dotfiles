@@ -4,7 +4,7 @@
 #
 # Read `man 5 sway` for a complete reference.
 
-font hack 10
+font pango:monospace 10
 
 ### Variables
 #

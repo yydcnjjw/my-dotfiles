@@ -30,7 +30,4 @@ text = "CellForeground"
 TERM = "xterm-256color"
 
 [font]
-size = 9
-
-[font.normal]
-family = "Hack"
+size = 10
