@@ -69,7 +69,13 @@ done
 
 if [ ${#MISSING_PACKAGES[@]} -ne 0 ]; then
     echo "Installing missing packages: ${MISSING_PACKAGES[*]}"
-    sudo pacman -S --noconfirm "${MISSING_PACKAGES[@]}"
+    if command -v yay >/dev/null 2>&1; then
+        yay -S --noconfirm "${MISSING_PACKAGES[@]}"
+    elif command -v paru >/dev/null 2>&1; then
+        paru -S --noconfirm "${MISSING_PACKAGES[@]}"
+    else
+        sudo pacman -S --noconfirm "${MISSING_PACKAGES[@]}"
+    fi
 else
     echo "All necessary packages are already installed, skipping."
 fi
