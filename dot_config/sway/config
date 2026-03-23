@@ -243,3 +243,9 @@ for_window [app_id="org.fcitx.fcitx5-config-qt"] floating enable
 
 exec fcitx5 -d
 exec wayvnc 0.0.0.0
+exec mako
+
+# Notification management
+bindsym $mod+Shift+n exec makoctl dismiss
+bindsym $mod+Shift+m exec makoctl menu -- fuzzel -d
+bindsym $mod+Control+n exec makoctl dismiss --all
