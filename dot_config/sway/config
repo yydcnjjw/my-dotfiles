@@ -240,6 +240,7 @@ titlebar_border_thickness 0
 
 for_window [app_id="flameshot"] border pixel 0, floating enable, fullscreen disable, move absolute position 0 0
 for_window [app_id="org.fcitx.fcitx5-config-qt"] floating enable
+for_window [app_id="org.pulseaudio.pavucontrol"] floating enable, resize set 800 600, move position center
 
 exec fcitx5 -d
 exec wayvnc 0.0.0.0
