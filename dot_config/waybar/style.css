@@ -1,12 +1,7 @@
-/* 
- * 强制指定图标字体优先级。
- * Hack Nerd Font Mono 通常包含常用图标。
- * Font Awesome 7 Free 用于补充。
- */
 * {
     border: none;
     border-radius: 0;
-    font-family: "Hack Nerd Font Mono", "Font Awesome 7 Free", "Font Awesome 7 Free Solid", "Symbols Nerd Font Mono", "monospace";
+    font-family: monospace, "Font Awesome 7 Free", sans-serif;
     font-size: 11px;
     min-height: 0;
 }
@@ -27,7 +22,6 @@ window#waybar {
     border-bottom: 2px solid #ffffff;
 }
 
-/* 显式为模块指定字体，防止继承失效 */
 #clock,
 #cpu,
 #memory,
@@ -36,7 +30,6 @@ window#waybar {
 #tray,
 #mode {
     padding: 0 6px;
-    font-family: "Hack Nerd Font Mono", "Font Awesome 7 Free", "Font Awesome 7 Free Solid", "monospace";
 }
 
 #clock { background-color: #333333; }
