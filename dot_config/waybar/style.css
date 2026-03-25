@@ -1,8 +1,12 @@
+/* 
+ * 强制指定图标字体优先级。
+ * Hack Nerd Font Mono 通常包含常用图标。
+ * Font Awesome 7 Free 用于补充。
+ */
 * {
     border: none;
     border-radius: 0;
-    /* 极致简化，主要依赖系统对 monospace 的回退处理 */
-    font-family: "Hack Nerd Font Mono", "Font Awesome 7 Free", "Font Awesome 7 Free Solid", monospace, sans-serif;
+    font-family: "Hack Nerd Font Mono", "Font Awesome 7 Free", "Font Awesome 7 Free Solid", "Symbols Nerd Font Mono", "monospace";
     font-size: 11px;
     min-height: 0;
 }
@@ -16,7 +20,6 @@ window#waybar {
     padding: 0 4px;
     background-color: transparent;
     color: #ffffff;
-    border-bottom: 2px solid transparent;
 }
 
 #workspaces button.focused {
@@ -24,6 +27,7 @@ window#waybar {
     border-bottom: 2px solid #ffffff;
 }
 
+/* 显式为模块指定字体，防止继承失效 */
 #clock,
 #cpu,
 #memory,
@@ -32,40 +36,15 @@ window#waybar {
 #tray,
 #mode {
     padding: 0 6px;
-    margin: 0;
+    font-family: "Hack Nerd Font Mono", "Font Awesome 7 Free", "Font Awesome 7 Free Solid", "monospace";
 }
 
-#clock {
-    background-color: #333333;
-}
+#clock { background-color: #333333; }
+#cpu { background-color: #27ae60; color: #000000; }
+#memory { background-color: #8e44ad; }
+#network { background-color: #2980b9; }
+#pulseaudio { background-color: #f39c12; color: #000000; }
+#tray { background-color: #2c3e50; }
 
-#cpu {
-    background-color: #27ae60;
-    color: #000000;
-}
-
-#memory {
-    background-color: #8e44ad;
-}
-
-#network {
-    background-color: #2980b9;
-}
-
-#pulseaudio {
-    background-color: #f39c12;
-    color: #000000;
-}
-
-#tray {
-    background-color: #2c3e50;
-}
-
-#tray > .passive {
-    -gtk-icon-effect: dim;
-}
-
-#tray > .needs-attention {
-    -gtk-icon-effect: highlight;
-    background-color: #eb4d4b;
-}
+#tray > .passive { -gtk-icon-effect: dim; }
+#tray > .needs-attention { -gtk-icon-effect: highlight; background-color: #eb4d4b; }
