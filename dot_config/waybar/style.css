@@ -1,8 +1,8 @@
 * {
     border: none;
     border-radius: 0;
-    /* 修正字体名为系统中实际安装的名称 */
-    font-family: "Font Awesome 7 Free", monospace, sans-serif;
+    /* 极致简化，主要依赖系统对 monospace 的回退处理 */
+    font-family: "Hack Nerd Font Mono", "Font Awesome 7 Free", "Font Awesome 7 Free Solid", monospace, sans-serif;
     font-size: 11px;
     min-height: 0;
 }
