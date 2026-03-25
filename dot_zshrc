@@ -115,9 +115,9 @@ elif command -v batcat >/dev/null 2>&1; then
 fi
 
 if command -v eza >/dev/null 2>&1; then
-  alias ls='eza --icons'
-  alias ll='eza -l --icons'
-  alias la='eza -la --icons'
+  alias ls='eza --icons=auto'
+  alias ll='eza -l --icons=auto'
+  alias la='eza -la --icons=auto'
 fi
 
 # Auto-start and attach to tmux
