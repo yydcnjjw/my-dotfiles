@@ -1,0 +1,71 @@
+* {
+    border: none;
+    border-radius: 0;
+    /* 修正字体名为系统中实际安装的名称 */
+    font-family: "Font Awesome 7 Free", monospace, sans-serif;
+    font-size: 11px;
+    min-height: 0;
+}
+
+window#waybar {
+    background-color: rgba(30, 30, 30, 0.85);
+    color: #ffffff;
+}
+
+#workspaces button {
+    padding: 0 4px;
+    background-color: transparent;
+    color: #ffffff;
+    border-bottom: 2px solid transparent;
+}
+
+#workspaces button.focused {
+    background-color: #444444;
+    border-bottom: 2px solid #ffffff;
+}
+
+#clock,
+#cpu,
+#memory,
+#network,
+#pulseaudio,
+#tray,
+#mode {
+    padding: 0 6px;
+    margin: 0;
+}
+
+#clock {
+    background-color: #333333;
+}
+
+#cpu {
+    background-color: #27ae60;
+    color: #000000;
+}
+
+#memory {
+    background-color: #8e44ad;
+}
+
+#network {
+    background-color: #2980b9;
+}
+
+#pulseaudio {
+    background-color: #f39c12;
+    color: #000000;
+}
+
+#tray {
+    background-color: #2c3e50;
+}
+
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+    background-color: #eb4d4b;
+}
