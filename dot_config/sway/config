@@ -236,6 +236,7 @@ exec fcitx5 -d
 exec wayvnc 0.0.0.0
 exec mako
 exec /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 || /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1
+exec emacs --daemon
 
 # Notification management
 bindsym $mod+Shift+n exec makoctl dismiss

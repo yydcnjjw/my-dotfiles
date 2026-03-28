@@ -4,6 +4,12 @@
 [pull]
 	rebase = true
 
+[http]
+    proxy = socks5h://127.0.0.1:8888
+
+[https]
+    proxy = socks5h://127.0.0.1:8888
+
 [filter "lfs"]
 	clean = git-lfs clean -- %f
 	smudge = git-lfs smudge -- %f

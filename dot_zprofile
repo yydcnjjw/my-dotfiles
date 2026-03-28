@@ -1,0 +1,9 @@
+# for xwayland
+export XMODIFIERS=@im=fcitx
+
+# for Qt5
+export QT_IM_MODULE=fcitx
+
+if [ -z "$WAYLAND_DISPLAY" ] && [ -n "$XDG_VTNR" ] && [ "$XDG_VTNR" -eq 1 ] ; then
+    exec sway
+fi
