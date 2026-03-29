@@ -1,65 +1,55 @@
 {
-    "layer": "top",
-    "position": "top",
-    "height": 24,
-    "spacing": 0,
-    "modules-left": ["sway/workspaces", "sway/mode", "sway/scratchpad"],
-    "modules-center": ["sway/window"],
-    "modules-right": ["pulseaudio", "network", "cpu", "memory", "tray", "clock"],
+  "layer": "top",
+  "position": "top",
+  "height": 24,
+  "spacing": 0,
+  "modules-left": ["sway/workspaces", "sway/mode", "sway/scratchpad"],
+  "modules-center": ["sway/window"],
+  "modules-right": ["pulseaudio", "network", "cpu", "memory", "tray", "clock"],
 
-    "sway/workspaces": {
-        "disable-scroll": true,
-        "all-outputs": true,
-        "format": "{name}"
-    },
-    "tray": {
-        "icon-size": 21,
-        "spacing": 10
-    },
-    "clock": {
-        "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
-        "format-alt": "{:%Y-%m-%d}"
-    },
-    "cpu": {
-        "format": " {usage}%",
-        "tooltip": false
-    },
-    "memory": {
-        "format": " {}%"
-    },
-    "temperature": {
-        "critical-threshold": 80,
-        "format": "{icon} {temperatureC}°C",
-        "format-icons": ["", "", ""]
-    },
-    "backlight": {
-        "format": "{icon} {percent}%",
-        "format-icons": ["", ""]
-    },
-    "network": {
-        "format-wifi": " {essid} ({signalStrength}%)",
-        "format-ethernet": "󰈀 {ipaddr}/{cidr}",
-        "tooltip-format": "󰈀 {ifname} via {gwaddr}",
-        "format-linked": "󰈀 {ifname} (No IP)",
-        "format-disconnected": "󰈂 Disconnected ⚠",
-        "format-alt": "{ifname}: {ipaddr}/{cidr}"
-    },
-    "pulseaudio": {
-        "format": "{icon} {volume}% {format_source}",
-        "format-bluetooth": "{volume}% {icon} {format_source}",
-        "format-bluetooth-muted": "󰂲 {icon} {format_source}",
-        "format-muted": "󰝟 {format_source}",
-        "format-source": " {volume}%",
-        "format-source-muted": "",
-        "format-icons": {
-            "headphone": "",
-            "hands-free": "",
-            "headset": "",
-            "phone": "",
-            "portable": "",
-            "car": "",
-            "default": ["", "", ""]
-        },
-        "on-click": "pavucontrol"
-    }
+  "sway/workspaces": {
+    "disable-scroll": true,
+    "all-outputs": true,
+    "format": "{name}"
+  },
+  "tray": {
+    "icon-size": 21,
+    "spacing": 10
+  },
+  "clock": {
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+    "format-alt": "{:%Y-%m-%d}"
+  },
+  "cpu": {
+    "format": " {usage}%",
+    "tooltip": false
+  },
+  "memory": {
+    "format": " {}%"
+  },
+  "network": {
+    "format-wifi": " {essid} ({signalStrength}%)",
+    "format-ethernet": "󰈀 {ipaddr}/{cidr}",
+    "tooltip-format": "󰈀 {ifname} via {gwaddr}",
+    "format-linked": "󰈀 {ifname} (No IP)",
+    "format-disconnected": "󰈂 Disconnected ⚠",
+    "format-alt": "{ifname}: {ipaddr}/{cidr}"
+  },
+  "pulseaudio": {
+	"format": "{volume}% {icon}",
+	"format-bluetooth": "{volume}%  ",
+	"format-muted": "",
+	"format-icons": {
+	  "headphone": "",
+	  "hands-free": "",
+	  "headset": "",
+	  "phone": "",
+	  "phone-muted": "",
+	  "portable": "",
+	  "car": "",
+	  "default": ["", ""]
+	},
+	"scroll-step": 1,
+	"on-click": "pavucontrol"
+  }
 }
