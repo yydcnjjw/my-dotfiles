@@ -1,3 +1,6 @@
+[include]
+    path = .gitconfig.local
+
 [init]
 	defaultBranch = main
 
@@ -5,10 +8,10 @@
 	rebase = true
 
 [http]
-    proxy = socks5h://127.0.0.1:8888
+    proxy = socks5h://{{ .proxy_ip }}:{{ .socks_port }}
 
 [https]
-    proxy = socks5h://127.0.0.1:8888
+    proxy = socks5h://{{ .proxy_ip }}:{{ .socks_port }}
 
 [filter "lfs"]
 	clean = git-lfs clean -- %f
