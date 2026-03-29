@@ -231,6 +231,16 @@ titlebar_border_thickness 0
 for_window [app_id="flameshot"] border pixel 0, floating enable, fullscreen disable, move absolute position 0 0
 for_window [app_id="org.fcitx.fcitx5-config-qt"] floating enable
 for_window [app_id="org.pulseaudio.pavucontrol"] floating enable, resize set 800 600, move position center
+for_window [app_id="blueman-manager"] floating enable, resize set 800 600, move position center
+
+# for xwayland
+for_window [window_role="pop-up"] floating enable
+for_window [window_role="bubble"] floating enable
+for_window [window_role="task_dialog"] floating enable
+for_window [window_role="dialog"] floating enable
+for_window [window_role="menu"] floating enable
+for_window [window_type="dialog"] floating enable
+for_window [window_type="menu"] floating enable
 
 exec fcitx5 -d
 exec wayvnc 0.0.0.0
