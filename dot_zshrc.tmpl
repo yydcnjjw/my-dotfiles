@@ -122,5 +122,5 @@ fi
 
 # Auto-start and attach to tmux
 if [ -z "$TMUX" ] && [ -n "$PS1" ]; then
-    exec tmux new-session -A -s "$USER"
+    tmux new-session -A -s "$USER"
 fi
