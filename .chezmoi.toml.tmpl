@@ -1,8 +1,10 @@
 {{- $proxy_ip := promptStringOnce . "proxy_ip" "Proxy IP address (e.g. 127.0.0.1)" "127.0.0.1" -}}
 {{- $http_port := promptStringOnce . "http_port" "HTTP Proxy Port (e.g. 8118)" "8118" -}}
 {{- $socks_port := promptStringOnce . "socks_port" "SOCKS Proxy Port (e.g. 8888)" "8888" -}}
+{{- $install_wayvnc := promptBoolOnce . "install_wayvnc" "Install and enable wayvnc?" false -}}
 
 [data]
     proxy_ip = {{ $proxy_ip | quote }}
     http_port = {{ $http_port | quote }}
     socks_port = {{ $socks_port | quote }}
+    install_wayvnc = {{ $install_wayvnc }}

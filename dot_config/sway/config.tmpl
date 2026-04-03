@@ -244,7 +244,9 @@ for_window [window_type="menu"] floating enable
 
 exec fcitx5 -d
 exec wayland-pipewire-idle-inhibit
+{{- if .install_wayvnc }}
 exec wayvnc 0.0.0.0
+{{- end }}
 exec mako
 exec /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 || /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1
 exec emacs --daemon
