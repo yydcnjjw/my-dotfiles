@@ -29,24 +29,28 @@ PACKAGES=(
     "fd"
     "ripgrep"
 
-    "fcitx5-im"
-    "fcitx5-rime"
     "noto-fonts-cjk"
     "noto-fonts-emoji"
     "ttf-hack"
     "ttf-hack-nerd"
     "ttf-font-awesome"
     "ttf-lxgw-wenkai"
+
+    {{- if not .is_wsl }}
+    "fcitx5-im"
+    "fcitx5-rime"
     "fcitx5-skin-fluentdark-git"
 
     "flameshot"
+    "alacritty"
+    "wl-clipboard"
+    "xorg-xwayland"
     "xdg-desktop-portal-wlr"
     "polkit-gnome"
 
     # sway tools
     "sway"
     "waybar"
-    "alacritty"
     "fuzzel"
     "swayidle"
     "swaylock"
@@ -54,14 +58,13 @@ PACKAGES=(
     {{- if .install_wayvnc }}
     "wayvnc"
     {{- end }}
-    "wl-clipboard"
-    "xorg-xwayland"
-
-    # network tools
-    "openssh"
 
     # notification
     "mako"
+    {{- end }}
+
+    # network tools
+    "openssh"
 
     "emacs"
     "mu"
@@ -110,32 +113,9 @@ PACKAGES=(
     "unzip"
     "tar"
     "curl"
-    "wget"
-    "zoxide"
     "bat"
     "fd-find"
     "ripgrep"
-
-    # sway tools
-    "sway"
-    "waybar"
-    "alacritty"
-    "fuzzel"
-    "swayidle"
-    "swaylock"
-    "wayland-pipewire-idle-inhibit"
-    {{- if .install_wayvnc }}
-    "wayvnc"
-    {{- end }}
-    "wl-clipboard"
-    "xwayland"
-
-    # network tools
-    "openssh-server"
-
-    # input method
-    "fcitx5-rime"
-    "fcitx5-frontend-all"
 
     # fonts
     "fonts-noto-cjk"
@@ -143,15 +123,39 @@ PACKAGES=(
     "fonts-hack-ttf"
     "fonts-font-awesome"
 
-    # notification
-    "mako-notifier"
+    {{- if not .is_wsl }}
+    "alacritty"
+    "wl-clipboard"
+    "xwayland"
+
+    # input method
+    "fcitx5-rime"
+    "fcitx5-frontend-all"
 
     # screenshot
     "flameshot"
 
+    # sway tools
+    "sway"
+    "waybar"
+    "fuzzel"
+    "swayidle"
+    "swaylock"
+    "wayland-pipewire-idle-inhibit"
+    {{- if .install_wayvnc }}
+    "wayvnc"
+    {{- end }}
+
+    # notification
+    "mako-notifier"
+
     # xdg portal
     "xdg-desktop-portal-wlr"
     "policykit-1-gnome"
+    {{- end }}
+
+    # network tools
+    "openssh-server"
 
     "emacs"
 )
