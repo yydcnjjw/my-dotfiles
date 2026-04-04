@@ -1,5 +1,5 @@
 font=monospace 10
-layer=top
+layer=overlay
 anchor=top-right
 border-size=2
 border-color=#3b8eea
