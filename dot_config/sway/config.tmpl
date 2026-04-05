@@ -174,7 +174,7 @@ exec swayidle -w \
 
     # Dropdown terminal (Quake-style)
     set $dropterm_id dropdown_terminal
-    set $dropterm $term --class $dropterm_id
+    set $dropterm $term --class $dropterm_id -o "window.opacity=0.8"
 
     bindsym $mod+grave scratchpad show
 
