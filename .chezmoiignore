@@ -2,6 +2,10 @@
 README.md
 docs/
 
+{{- if not .is_wsl }}
+.config/opencode/opencode-notifier.json
+{{- end }}
+
 {{- if .is_wsl }}
 .config/alacritty
 .config/flameshot
