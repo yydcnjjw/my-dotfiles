@@ -20,5 +20,8 @@
   },
   "hooksConfig": {
     "enabled": true
+  },
+  "general": {
+    "enableNotifications": true
   }
 }
