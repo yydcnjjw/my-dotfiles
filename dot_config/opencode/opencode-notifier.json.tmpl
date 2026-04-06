@@ -1,16 +1,16 @@
+{{- if .is_wsl }}
 {
   "notification": false,
   "sound": false,
   "command": {
-{{- if .is_wsl }}
     "enabled": true,
     "path": "/mnt/c/Users/yydcnjjw/AppData/Local/Microsoft/WindowsApps/Microsoft.PowerShell_8wekyb3d8bbwe/pwsh.exe",
     "args": [
+      "-NoProfile",
+      "-NonInteractive",
       "-Command",
       "New-BurntToastNotification -Text 'OpenCode - {event}', '{message}'"
     ]
-{{- else }}
-    "enabled": false
-{{- end }}
   }
 }
+{{- end }}
