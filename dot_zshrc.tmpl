@@ -1,40 +1,27 @@
-# Initialize zplug
-export ZPLUG_HOME=$HOME/.zplug
-source $ZPLUG_HOME/init.zsh
+# Path to your Oh My Zsh installation.
+export ZSH="$HOME/.oh-my-zsh"
 
-# Oh My Zsh Library
-zplug "lib/*", from:oh-my-zsh
+# Set name of the theme to load
+ZSH_THEME="ys"
 
-# Oh My Zsh Plugins
-zplug "plugins/git",   from:oh-my-zsh
-zplug "plugins/extract", from:oh-my-zsh
-zplug "plugins/archlinux", from:oh-my-zsh
-zplug "plugins/docker", from:oh-my-zsh
-zplug "plugins/eza", from:oh-my-zsh
-zplug "plugins/zoxide", from:oh-my-zsh
-zplug "plugins/fzf", from:oh-my-zsh
+# Which plugins would you like to load?
+plugins=(
+  git
+  extract
+  archlinux
+  docker
+  eza
+  zoxide
+  fzf
+  fzf-tab
+  zsh-autosuggestions
+  {{- if not .is_wsl }}
+  zsh-auto-notify
+  {{- end }}
+  zsh-syntax-highlighting
+)
 
-# Third-party Plugins
-zplug "zsh-users/zsh-autosuggestions"
-zplug "zsh-users/zsh-syntax-highlighting", defer:2
-zplug "Aloxaf/fzf-tab"
-{{- if not .is_wsl }}
-zplug "MichaelAquilina/zsh-auto-notify"
-{{- end }}
-
-# Oh My Zsh Theme
-zplug "themes/ys", from:oh-my-zsh, as:theme
-
-# Install plugins if they are not installed
-if ! zplug check --verbose; then
-    printf "Install? [y/N]: "
-    if read -q; then
-        echo; zplug install
-    fi
-fi
-
-# Load plugins
-zplug load
+source $ZSH/oh-my-zsh.sh
 
 # User configuration
 if command -v bat >/dev/null 2>&1; then
