@@ -26,7 +26,7 @@
     stripComponents = 1
     refreshPeriod = "168h"
 
-[".oh-my-zsh/custom/plugins/zsh-auto-notify"]
+[".oh-my-zsh/custom/plugins/auto-notify"]
     type = "archive"
     url = "https://github.com/MichaelAquilina/zsh-auto-notify/archive/master.tar.gz"
     exact = false
