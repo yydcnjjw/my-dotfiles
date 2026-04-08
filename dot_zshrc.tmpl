@@ -18,6 +18,9 @@ zplug "plugins/fzf", from:oh-my-zsh
 zplug "zsh-users/zsh-autosuggestions"
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 zplug "Aloxaf/fzf-tab"
+{{- if not .is_wsl }}
+zplug "MichaelAquilina/zsh-auto-notify"
+{{- end }}
 
 # Oh My Zsh Theme
 zplug "themes/ys", from:oh-my-zsh, as:theme
