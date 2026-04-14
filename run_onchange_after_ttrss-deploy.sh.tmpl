@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# docker-compose.yml hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/ttrss/docker-compose.yml") | sha256sum }}
+# .env hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/ttrss/dot_env.tmpl") | sha256sum }}
+
+echo "Detecting changes in tt-rss config, updating docker containers..."
+
+# Detect the correct docker compose command
+if docker compose version &> /dev/null || sudo docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+elif docker-compose version &> /dev/null || sudo docker-compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+else
+    echo "Error: Neither 'docker compose' nor 'docker-compose' found. Please install Docker Compose."
+    exit 0
+fi
+
+# Function to run docker compose with or without sudo
+run_docker_compose() {
+    if docker info &> /dev/null; then
+        $DOCKER_COMPOSE "$@"
+    else
+        echo "Docker requires sudo privileges, requesting sudo..."
+        sudo $DOCKER_COMPOSE "$@"
+    fi
+}
+
+if command -v docker &> /dev/null || command -v sudo docker &> /dev/null; then
+    cd "$HOME/.config/ttrss"
+    echo "Using: $DOCKER_COMPOSE"
+    run_docker_compose up -d --remove-orphans
+else
+    echo "Warning: Docker is not installed. Skipping tt-rss deployment."
+fi

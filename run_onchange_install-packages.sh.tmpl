@@ -68,6 +68,10 @@ PACKAGES=(
 
     "emacs"
     "mu"
+    {{- if .install_ttrss }}
+    "docker"
+    "docker-compose"
+    {{- end }}
 )
 
 # Check missing packages
@@ -158,6 +162,10 @@ PACKAGES=(
     "openssh-server"
 
     "emacs"
+    {{- if .install_ttrss }}
+    "docker.io"
+    "docker-compose-v2"
+    {{- end }}
 )
 
 # Ensure package lists are up to date
@@ -214,3 +222,16 @@ if command -v zsh >/dev/null 2>&1; then
         echo "Default shell is already Zsh ($USER_SHELL), skipping shell change."
     fi
 fi
+
+# Post-install Docker setup
+{{- if .install_ttrss }}
+if command -v docker >/dev/null 2>&1; then
+    echo "Configuring Docker..."
+    sudo systemctl enable --now docker
+    if ! groups "$USER" | grep -q "\bdocker\b"; then
+        echo "Adding $USER to docker group..."
+        sudo usermod -aG docker "$USER"
+        echo "Please logout and login again for docker group changes to take effect."
+    fi
+fi
+{{- end }}

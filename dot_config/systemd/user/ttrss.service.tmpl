@@ -1,0 +1,15 @@
+[Unit]
+Description=Tiny Tiny RSS Docker Compose Service
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/.config/ttrss
+# Use the same logic as the deploy script to find docker compose
+ExecStart=/bin/bash -c "if docker compose version &> /dev/null; then docker compose up -d; else docker-compose up -d; fi"
+ExecStop=/bin/bash -c "if docker compose version &> /dev/null; then docker compose down; else docker-compose down; fi"
+
+[Install]
+WantedBy=default.target
