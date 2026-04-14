@@ -13,16 +13,3 @@ HTTP_PORT=8280
 
 # Other settings
 ADMIN_USER_PASS=password
-
-# Proxy configuration for feed fetching
-{{- if .use_proxy_for_ttrss }}
-# TTRSS constants for proxy:
-# _PROXY_ADDRESS (host), _PROXY_PORT (port), _PROXY_TYPE (CURLPROXY_HTTP=0, CURLPROXY_SOCKS5=5)
-{{- if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}
-TTRSS_PROXY_ADDRESS=host.docker.internal
-{{- else }}
-TTRSS_PROXY_ADDRESS={{ .proxy_ip }}
-{{- end }}
-TTRSS_PROXY_PORT={{ .http_port }}
-TTRSS_PROXY_TYPE=0
-{{- end }}

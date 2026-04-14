@@ -16,6 +16,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    {{- if .use_proxy_for_ttrss }}
+    environment:
+      - HTTP_PROXY=http://{{ if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}host.docker.internal{{ else }}{{ .proxy_ip }}{{ end }}:{{ .http_port }}
+      - HTTPS_PROXY=http://{{ if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}host.docker.internal{{ else }}{{ .proxy_ip }}{{ end }}:{{ .http_port }}
+    {{- end }}
     volumes:
       - app:/var/www/html
       - ./config.d:/opt/tt-rss/config.d:ro
@@ -29,6 +34,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    {{- if .use_proxy_for_ttrss }}
+    environment:
+      - HTTP_PROXY=http://{{ if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}host.docker.internal{{ else }}{{ .proxy_ip }}{{ end }}:{{ .http_port }}
+      - HTTPS_PROXY=http://{{ if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}host.docker.internal{{ else }}{{ .proxy_ip }}{{ end }}:{{ .http_port }}
+    {{- end }}
     volumes:
       - app:/var/www/html
       - ./config.d:/opt/tt-rss/config.d:ro

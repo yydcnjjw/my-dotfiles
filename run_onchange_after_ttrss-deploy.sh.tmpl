@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# docker-compose.yml hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/ttrss/docker-compose.yml") | sha256sum }}
+# docker-compose.yml hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/ttrss/docker-compose.yml.tmpl") | sha256sum }}
 # .env hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/ttrss/dot_env.tmpl") | sha256sum }}
 
 echo "Detecting changes in tt-rss config, updating docker containers..."

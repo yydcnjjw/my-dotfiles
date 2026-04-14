@@ -1,7 +1,6 @@
 [Unit]
 Description=Tiny Tiny RSS Docker Compose Service
-Requires=docker.service
-After=docker.service network-online.target
+After=network-online.target
 
 [Service]
 Type=oneshot
