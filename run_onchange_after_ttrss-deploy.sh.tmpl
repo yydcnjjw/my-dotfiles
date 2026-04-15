@@ -2,8 +2,22 @@
 
 # docker-compose.yml hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/ttrss/docker-compose.yml.tmpl") | sha256sum }}
 # .env hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/ttrss/dot_env.tmpl") | sha256sum }}
+# nginx-proxy.conf hash: {{ include (joinPath .chezmoi.sourceDir "dot_config/ttrss/nginx-proxy.conf.tmpl") | sha256sum }}
 
 echo "Detecting changes in tt-rss config, updating docker containers..."
+
+# Ensure SSL certificate exists
+SSL_DIR="$HOME/.config/ttrss/ssl"
+mkdir -p "$SSL_DIR"
+if [ ! -f "$SSL_DIR/ttrss.crt" ]; then
+    echo "Generating self-signed certificate for tt-rss..."
+    # 为自签名证书提供一个默认的 CN
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout "$SSL_DIR/ttrss.key" \
+        -out "$SSL_DIR/ttrss.crt" \
+        -subj "/C=CN/ST=None/L=None/O=tt-rss/CN=localhost" \
+        -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+fi
 
 # Detect the correct docker compose command
 if docker compose version &> /dev/null || sudo docker compose version &> /dev/null; then

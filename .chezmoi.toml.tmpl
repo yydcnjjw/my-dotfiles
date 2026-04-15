@@ -5,7 +5,7 @@
 {{- $install_ttrss := promptBoolOnce . "install_ttrss" "Install and enable Tiny Tiny RSS (Docker)?" false -}}
 {{- $is_wsl := (and (eq .chezmoi.os "linux") (contains "microsoft" (.chezmoi.kernel.osrelease | lower))) -}}
 {{- $ttrss_db_pass := promptStringOnce . "ttrss_db_pass" "TTRSS Database Password" "ttrss_db_password" -}}
-{{- $ttrss_url := promptStringOnce . "ttrss_url" "TTRSS External URL (e.g. http://localhost:8280/tt-rss)" "http://localhost:8280/tt-rss" -}}
+{{- $ttrss_expose_port := promptStringOnce . "ttrss_expose_port" "TTRSS expose port (e.g. 8443)" "8443" -}}
 
 [data]
     proxy_ip = {{ $proxy_ip | quote }}
@@ -16,4 +16,4 @@
     use_proxy_for_ttrss = {{ promptBoolOnce . "use_proxy_for_ttrss" "Use proxy for tt-rss (to fetch RSS feeds)?" false }}
     is_wsl = {{ $is_wsl }}
     ttrss_db_pass = {{ $ttrss_db_pass | quote }}
-    ttrss_url = {{ $ttrss_url | quote }}
+    ttrss_expose_port = {{ $ttrss_expose_port | quote }}

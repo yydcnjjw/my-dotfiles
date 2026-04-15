@@ -1,15 +1,6 @@
-# tt-rss .env template
-
-# Database credentials
 TTRSS_DB_USER=ttrss
 TTRSS_DB_NAME=ttrss
 TTRSS_DB_PASS={{ .ttrss_db_pass }}
 
-# External access URL (MANDATORY)
-TTRSS_SELF_URL_PATH={{ .ttrss_url }}
-
-# Port to expose on the host
-HTTP_PORT=8280
-
-# Other settings
-ADMIN_USER_PASS=password
+TTRSS_SELF_URL_PATH=https://localhost:{{ .ttrss_expose_port }}/tt-rss/
+HTTPS_PORT={{ .ttrss_expose_port }}

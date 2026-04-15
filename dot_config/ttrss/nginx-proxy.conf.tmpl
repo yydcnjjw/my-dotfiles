@@ -1,0 +1,27 @@
+events {
+    worker_connections 1024;
+}
+
+http {
+    server {
+        listen 443 ssl;
+        server_name _;
+
+        ssl_certificate /etc/nginx/ssl/ttrss.crt;
+        ssl_certificate_key /etc/nginx/ssl/ttrss.key;
+
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        location /tt-rss/ {
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_pass http://web-nginx:80/tt-rss/;
+            proxy_redirect http://$host/tt-rss/ https://$http_host/tt-rss/;
+            break;
+        }
+    }
+}

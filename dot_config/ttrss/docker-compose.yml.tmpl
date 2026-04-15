@@ -16,11 +16,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    {{- if .use_proxy_for_ttrss }}
     environment:
+      {{- if .use_proxy_for_ttrss }}
       - HTTP_PROXY=http://{{ if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}host.docker.internal{{ else }}{{ .proxy_ip }}{{ end }}:{{ .http_port }}
       - HTTPS_PROXY=http://{{ if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}host.docker.internal{{ else }}{{ .proxy_ip }}{{ end }}:{{ .http_port }}
-    {{- end }}
+      {{- end }}
+
     volumes:
       - app:/var/www/html
       - ./config.d:/opt/tt-rss/config.d:ro
@@ -34,11 +35,13 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    {{- if .use_proxy_for_ttrss }}
     environment:
+      - TTRSS_X_FORWARDED_PROTO=https
+      {{- if .use_proxy_for_ttrss }}
       - HTTP_PROXY=http://{{ if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}host.docker.internal{{ else }}{{ .proxy_ip }}{{ end }}:{{ .http_port }}
       - HTTPS_PROXY=http://{{ if or (eq .proxy_ip "127.0.0.1") (eq .proxy_ip "localhost") }}host.docker.internal{{ else }}{{ .proxy_ip }}{{ end }}:{{ .http_port }}
-    {{- end }}
+      {{- end }}
+
     volumes:
       - app:/var/www/html
       - ./config.d:/opt/tt-rss/config.d:ro
@@ -53,12 +56,21 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - ${HTTP_PORT}:80
     volumes:
       - app:/var/www/html:ro
     depends_on:
       - app
+
+  nginx-proxy:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - ${HTTPS_PORT}:443
+    volumes:
+      - ./nginx-proxy.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - web-nginx
 
 volumes:
   db:
