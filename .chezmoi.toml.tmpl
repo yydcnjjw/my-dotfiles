@@ -4,8 +4,15 @@
 {{- $install_wayvnc := promptBoolOnce . "install_wayvnc" "Install and enable wayvnc?" false -}}
 {{- $install_ttrss := promptBoolOnce . "install_ttrss" "Install and enable Tiny Tiny RSS (Docker)?" false -}}
 {{- $is_wsl := (and (eq .chezmoi.os "linux") (contains "microsoft" (.chezmoi.kernel.osrelease | lower))) -}}
-{{- $ttrss_db_pass := promptStringOnce . "ttrss_db_pass" "TTRSS Database Password" "ttrss_db_password" -}}
-{{- $ttrss_expose_port := promptStringOnce . "ttrss_expose_port" "TTRSS expose port (e.g. 8443)" "8443" -}}
+
+{{- $ttrss_db_pass := "ttrss_db_password" -}}
+{{- $ttrss_expose_port := "8443" -}}
+{{- $use_proxy_for_ttrss := false -}}
+{{- if $install_ttrss -}}
+{{-   $ttrss_db_pass = promptStringOnce . "ttrss_db_pass" "TTRSS Database Password" "ttrss_db_password" -}}
+{{-   $ttrss_expose_port = promptStringOnce . "ttrss_expose_port" "TTRSS expose port (e.g. 8443)" "8443" -}}
+{{-   $use_proxy_for_ttrss = promptBoolOnce . "use_proxy_for_ttrss" "Use proxy for tt-rss (to fetch RSS feeds)?" false -}}
+{{- end -}}
 
 [data]
     proxy_ip = {{ $proxy_ip | quote }}
@@ -13,7 +20,7 @@
     socks_port = {{ $socks_port | quote }}
     install_wayvnc = {{ $install_wayvnc }}
     install_ttrss = {{ $install_ttrss }}
-    use_proxy_for_ttrss = {{ promptBoolOnce . "use_proxy_for_ttrss" "Use proxy for tt-rss (to fetch RSS feeds)?" false }}
+    use_proxy_for_ttrss = {{ $use_proxy_for_ttrss }}
     is_wsl = {{ $is_wsl }}
     ttrss_db_pass = {{ $ttrss_db_pass | quote }}
     ttrss_expose_port = {{ $ttrss_expose_port | quote }}
