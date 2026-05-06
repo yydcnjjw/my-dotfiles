@@ -16,3 +16,9 @@ docs/
 .config/gtk-4.0
 .config/fcitx5
 {{- end }}
+
+{{- if not .install_ttrss }}
+.config/ttrss
+run_onchange_after_ttrss-deploy.sh.tmpl
+.config/systemd/user/ttrss.service.tmpl
+{{- end }}

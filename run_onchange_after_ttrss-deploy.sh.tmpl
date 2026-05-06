@@ -6,6 +6,11 @@
 
 echo "Detecting changes in tt-rss config, updating docker containers..."
 
+{{- if not .install_ttrss }}
+echo "install_ttrss is false, skipping deployment."
+exit 0
+{{- end }}
+
 # Ensure SSL certificate exists
 SSL_DIR="$HOME/.config/ttrss/ssl"
 mkdir -p "$SSL_DIR"
