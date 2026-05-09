@@ -5,7 +5,7 @@ docs/
 .config/opencode/opencode-notifier.json
 {{- end }}
 
-{{- if .is_wsl }}
+{{- if not .install_sway }}
 .config/alacritty
 .config/flameshot
 .config/fuzzel

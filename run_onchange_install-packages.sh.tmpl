@@ -36,7 +36,7 @@ PACKAGES=(
     "ttf-font-awesome"
     "ttf-lxgw-wenkai"
 
-    {{- if not .is_wsl }}
+    {{- if .install_sway }}
     "fcitx5-im"
     "fcitx5-rime"
     "fcitx5-skin-fluentdark-git"
@@ -127,7 +127,7 @@ PACKAGES=(
     "fonts-hack-ttf"
     "fonts-font-awesome"
 
-    {{- if not .is_wsl }}
+    {{- if .install_sway }}
     "alacritty"
     "wl-clipboard"
     "xwayland"
