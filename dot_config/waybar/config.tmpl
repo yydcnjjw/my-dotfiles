@@ -3,11 +3,34 @@
   "position": "top",
   "height": 24,
   "spacing": 0,
-  "modules-left": ["sway/workspaces", "sway/mode", "sway/scratchpad"],
-  "modules-center": ["sway/window"],
+  "modules-left": [
+    {{- if .install_sway -}}
+    "sway/workspaces", "sway/mode", "sway/scratchpad"
+    {{- if .install_hyprland }}, {{ end -}}
+    {{- end -}}
+    {{- if .install_hyprland -}}
+    "hyprland/workspaces", "hyprland/submap"
+    {{- end -}}
+  ],
+  "modules-center": [
+    {{- if .install_sway -}}
+    "sway/window"
+    {{- end -}}
+    {{- if and .install_sway .install_hyprland -}}
+    ,
+    {{- end -}}
+    {{- if .install_hyprland -}}
+    "hyprland/window"
+    {{- end -}}
+  ],
   "modules-right": ["pulseaudio", "network", "cpu", "memory", "tray", "clock"],
 
   "sway/workspaces": {
+    "disable-scroll": true,
+    "all-outputs": true,
+    "format": "{name}"
+  },
+  "hyprland/workspaces": {
     "disable-scroll": true,
     "all-outputs": true,
     "format": "{name}"

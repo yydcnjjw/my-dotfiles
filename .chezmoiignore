@@ -17,6 +17,10 @@ docs/
 .config/fcitx5
 {{- end }}
 
+{{- if not .install_hyprland }}
+.config/hypr
+{{- end }}
+
 {{- if not .install_ttrss }}
 .config/ttrss
 run_onchange_after_ttrss-deploy.sh.tmpl

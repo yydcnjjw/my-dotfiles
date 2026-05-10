@@ -14,12 +14,14 @@
 {{-   $use_proxy_for_ttrss = promptBoolOnce . "use_proxy_for_ttrss" "Use proxy for tt-rss (to fetch RSS feeds)?" false -}}
 {{- end -}}
 {{- $install_sway := promptBoolOnce . "install_sway" "Install and configure Sway (Desktop Environment)?" (not $is_wsl) -}}
+{{- $install_hyprland := promptBoolOnce . "install_hyprland" "Install and configure Hyprland?" (not $is_wsl) -}}
 
 [data]
     proxy_ip = {{ $proxy_ip | quote }}
     http_port = {{ $http_port | quote }}
     socks_port = {{ $socks_port | quote }}
     install_sway = {{ $install_sway }}
+    install_hyprland = {{ $install_hyprland }}
     install_wayvnc = {{ $install_wayvnc }}
     install_ttrss = {{ $install_ttrss }}
     use_proxy_for_ttrss = {{ $use_proxy_for_ttrss }}

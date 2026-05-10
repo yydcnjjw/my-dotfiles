@@ -36,7 +36,7 @@ PACKAGES=(
     "ttf-font-awesome"
     "ttf-lxgw-wenkai"
 
-    {{- if .install_sway }}
+    {{- if or .install_sway .install_hyprland }}
     "fcitx5-im"
     "fcitx5-rime"
     "fcitx5-skin-fluentdark-git"
@@ -45,22 +45,30 @@ PACKAGES=(
     "alacritty"
     "wl-clipboard"
     "xorg-xwayland"
-    "xdg-desktop-portal-wlr"
     "polkit-gnome"
 
-    # sway tools
-    "sway"
     "waybar"
     "fuzzel"
-    "swayidle"
-    "swaylock"
     "wayland-pipewire-idle-inhibit"
+    "mako"
+
     {{- if .install_wayvnc }}
     "wayvnc"
     {{- end }}
+    {{- end }}
 
-    # notification
-    "mako"
+    {{- if .install_sway }}
+    "sway"
+    "swayidle"
+    "swaylock"
+    "xdg-desktop-portal-wlr"
+    {{- end }}
+
+    {{- if .install_hyprland }}
+    "hyprland"
+    "hypridle"
+    "hyprlock"
+    "xdg-desktop-portal-hyprland"
     {{- end }}
 
     # network tools
@@ -127,7 +135,7 @@ PACKAGES=(
     "fonts-hack-ttf"
     "fonts-font-awesome"
 
-    {{- if .install_sway }}
+    {{- if or .install_sway .install_hyprland }}
     "alacritty"
     "wl-clipboard"
     "xwayland"
@@ -139,23 +147,30 @@ PACKAGES=(
     # screenshot
     "flameshot"
 
-    # sway tools
-    "sway"
     "waybar"
     "fuzzel"
-    "swayidle"
-    "swaylock"
     "wayland-pipewire-idle-inhibit"
+    "mako-notifier"
+
+    "policykit-1-gnome"
+
     {{- if .install_wayvnc }}
     "wayvnc"
     {{- end }}
+    {{- end }}
 
-    # notification
-    "mako-notifier"
-
-    # xdg portal
+    {{- if .install_sway }}
+    "sway"
+    "swayidle"
+    "swaylock"
     "xdg-desktop-portal-wlr"
-    "policykit-1-gnome"
+    {{- end }}
+
+    {{- if .install_hyprland }}
+    "hyprland"
+    "hypridle"
+    "hyprlock"
+    "xdg-desktop-portal-hyprland"
     {{- end }}
 
     # network tools

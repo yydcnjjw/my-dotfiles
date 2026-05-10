@@ -5,5 +5,9 @@ if [ -z "$WAYLAND_DISPLAY" ] && [ -n "$XDG_VTNR" ] && [ "$XDG_VTNR" -eq 1 ] ; th
     # for Qt5
     export QT_IM_MODULE=fcitx
 
+{{- if .install_hyprland }}
+    exec start-hyprland
+{{- else if .install_sway }}
     exec sway
+{{- end }}
 fi

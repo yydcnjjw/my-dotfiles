@@ -1,0 +1,41 @@
+#!/bin/sh
+
+# fcitx5
+if command -v fcitx5 >/dev/null 2>&1; then
+    fcitx5 -d
+fi
+
+# wayland-pipewire-idle-inhibit
+if command -v wayland-pipewire-idle-inhibit >/dev/null 2>&1; then
+    wayland-pipewire-idle-inhibit &
+fi
+
+# hypridle
+if command -v hypridle >/dev/null 2>&1; then
+    hypridle &
+fi
+
+# mako
+if command -v mako >/dev/null 2>&1; then
+    mako &
+fi
+
+# polkit agent
+/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 || /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1 &
+
+# emacs
+if command -v emacs >/dev/null 2>&1; then
+    emacs --daemon &
+fi
+
+# dropdown terminal
+if command -v alacritty >/dev/null 2>&1; then
+    alacritty --class dropdown_terminal -o "window.opacity=0.8" &
+fi
+
+# wayvnc
+{{- if .install_wayvnc }}
+if command -v wayvnc >/dev/null 2>&1; then
+    wayvnc 0.0.0.0 &
+fi
+{{- end }}
