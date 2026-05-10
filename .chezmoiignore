@@ -6,11 +6,14 @@ docs/
 {{- end }}
 
 {{- if not .install_sway }}
+.config/sway
+{{- end }}
+
+{{- if and (not .install_sway) (not .install_hyprland) }}
 .config/alacritty
 .config/flameshot
 .config/fuzzel
 .config/mako
-.config/sway
 .config/waybar
 .config/gtk-3.0
 .config/gtk-4.0
