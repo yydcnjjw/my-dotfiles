@@ -124,7 +124,7 @@ hl.bind(mod .. "_SHIFT, Print", hl.dsp.exec_cmd("flameshot gui"))
 
 -- Notification
 hl.bind(mod .. "_SHIFT, N", hl.dsp.exec_cmd("makoctl dismiss"))
-hl.bind(mod .. "_SHIFT, M", hl.dsp.exec_cmd("makoctl menu -- fuzzel -d"))
+hl.bind(mod .. "_SHIFT, M", hl.dsp.exec_cmd("makoctl menu -- " .. menu .. " -d"))
 hl.bind(mod .. "_CONTROL, N", hl.dsp.exec_cmd("makoctl dismiss --all"))
 
 -- Resize mode
