@@ -36,6 +36,20 @@ if command -v eza >/dev/null 2>&1; then
   alias la='eza -la --icons=auto'
 fi
 
+if command -v remote-notify >/dev/null 2>&1; then
+  _local_notify_send="$(whence -p notify-send 2>/dev/null || true)"
+
+  notify-send() {
+    if [ -n "${REMOTE_NOTIFY_HOST:-}" ]; then
+      remote-notify "$@"
+    elif [ -n "$_local_notify_send" ]; then
+      "$_local_notify_send" "$@"
+    else
+      return 127
+    fi
+  }
+fi
+
 # Auto-start and attach to tmux
 if [ -z "$TMUX" ] && [ -n "$PS1" ]; then
     tmux new-session -A -s "$USER"

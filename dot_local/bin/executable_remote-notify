@@ -1,0 +1,104 @@
+#!/bin/sh
+
+set -eu
+
+app_name=
+urgency=
+icon=
+expire_time=
+host=${REMOTE_NOTIFY_HOST:-}
+
+usage() {
+  printf '%s\n' 'Usage: remote-notify [--host host] [-a app_name] [-u urgency] [-i icon] [-t expire_time] summary [body]' >&2
+  exit 2
+}
+
+require_value() {
+  [ "$#" -ge 2 ] || usage
+}
+
+append_quoted() {
+  quoted=$(printf "%s" "$1" | sed "s/'/'\\\\''/g")
+  remote_cmd="$remote_cmd '$quoted'"
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --host)
+      require_value "$@"
+      host=$2
+      shift 2
+      ;;
+    -a|--app-name)
+      require_value "$@"
+      app_name=$2
+      shift 2
+      ;;
+    -u|--urgency)
+      require_value "$@"
+      urgency=$2
+      shift 2
+      ;;
+    -i|--icon)
+      require_value "$@"
+      icon=$2
+      shift 2
+      ;;
+    -t|--expire-time)
+      require_value "$@"
+      expire_time=$2
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      printf 'remote-notify: unsupported option: %s\n' "$1" >&2
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+[ -n "$host" ] || {
+  printf '%s\n' 'remote-notify: REMOTE_NOTIFY_HOST is not set and --host was not provided' >&2
+  exit 2
+}
+
+case "$host" in
+  -*)
+    printf '%s\n' 'remote-notify: host must not start with -' >&2
+    exit 2
+    ;;
+esac
+
+[ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage
+
+case "$urgency" in
+  ""|low|normal|critical) ;;
+  *) usage ;;
+esac
+
+case "$expire_time" in
+  ""|*[!0-9]*)
+    [ -z "$expire_time" ] || usage
+    ;;
+esac
+
+summary=$1
+body=${2-}
+
+remote_cmd='PATH="$HOME/.local/bin:$PATH"; export PATH; exec local-notify'
+
+[ -n "$app_name" ] && append_quoted -a && append_quoted "$app_name"
+[ -n "$urgency" ] && append_quoted -u && append_quoted "$urgency"
+[ -n "$icon" ] && append_quoted -i && append_quoted "$icon"
+[ -n "$expire_time" ] && append_quoted -t && append_quoted "$expire_time"
+
+append_quoted "$summary"
+[ -n "$body" ] && append_quoted "$body"
+
+exec ssh -- "$host" "$remote_cmd"

@@ -1,0 +1,92 @@
+#!/bin/sh
+
+set -eu
+
+app_name=
+urgency=
+icon=
+expire_time=
+
+usage() {
+  printf '%s\n' 'Usage: local-notify [-a app_name] [-u urgency] [-i icon] [-t expire_time] summary [body]' >&2
+  exit 1
+}
+
+require_value() {
+  [ "$#" -ge 2 ] || usage
+  case "$2" in
+    -*) usage ;;
+  esac
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -a|--app-name)
+      require_value "$@"
+      app_name=$2
+      shift 2
+      ;;
+    -u|--urgency)
+      require_value "$@"
+      urgency=$2
+      shift 2
+      ;;
+    -i|--icon)
+      require_value "$@"
+      icon=$2
+      shift 2
+      ;;
+    -t|--expire-time)
+      require_value "$@"
+      expire_time=$2
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      usage
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+[ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage
+
+case "$urgency" in
+  ""|low|normal|critical) ;;
+  *) usage ;;
+esac
+
+case "$expire_time" in
+  ""|*[!0-9]*)
+    [ -z "$expire_time" ] || usage
+    ;;
+esac
+
+summary=$1
+body=${2-}
+
+uid=$(id -u)
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$uid}
+export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}
+
+command -v notify-send >/dev/null 2>&1 || {
+  printf '%s\n' 'local-notify: notify-send not found' >&2
+  exit 1
+}
+
+set -- notify-send
+
+[ -n "$app_name" ] && set -- "$@" -a "$app_name"
+[ -n "$urgency" ] && set -- "$@" -u "$urgency"
+[ -n "$icon" ] && set -- "$@" -i "$icon"
+[ -n "$expire_time" ] && set -- "$@" -t "$expire_time"
+
+set -- "$@" "$summary"
+[ -n "$body" ] && set -- "$@" "$body"
+
+exec "$@"
