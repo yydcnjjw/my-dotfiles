@@ -1,10 +1,6 @@
 README.md
 docs/
 
-{{- if not .is_wsl }}
-.config/opencode/opencode-notifier.json
-{{- end }}
-
 {{- if not .install_sway }}
 .config/sway
 {{- end }}
