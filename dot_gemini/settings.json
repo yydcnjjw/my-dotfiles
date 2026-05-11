@@ -12,7 +12,7 @@
             "type": "command",
             "command": "$HOME/.gemini/notify.sh",
             "name": "Desktop Notification",
-            "description": "通过 Windows PowerShell 或 notify-send 发送 Gemini 通知"
+            "description": "通过 remote-notify 或 local-notify 发送 Gemini 通知"
           }
         ]
       }

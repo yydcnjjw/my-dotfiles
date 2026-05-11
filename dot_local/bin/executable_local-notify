@@ -19,6 +19,55 @@ require_value() {
   esac
 }
 
+is_wsl() {
+  [ -r /proc/version ] && grep -qi microsoft /proc/version
+}
+
+powershell_path() {
+  if [ -n "${LOCAL_NOTIFY_PWSH:-}" ]; then
+    printf '%s\n' "$LOCAL_NOTIFY_PWSH"
+  else
+    printf '%s\n' '/mnt/c/Users/yydcnjjw/AppData/Local/Microsoft/WindowsApps/Microsoft.PowerShell_8wekyb3d8bbwe/pwsh.exe'
+  fi
+}
+
+escape_ps_single_quoted() {
+  printf '%s' "$1" | sed "s/'/''/g"
+}
+
+send_wsl_notification() {
+  ps_path=$(powershell_path)
+
+  [ -x "$ps_path" ] || [ -f "$ps_path" ] || return 1
+
+  title=$summary
+
+  escaped_title=$(escape_ps_single_quoted "$title")
+  escaped_body=$(escape_ps_single_quoted "$body")
+
+  if "$ps_path" -NoProfile -NonInteractive -Command "Get-Module -ListAvailable BurntToast" >/dev/null 2>&1; then
+    if [ -n "$body" ]; then
+      "$ps_path" -NoProfile -NonInteractive -Command "New-BurntToastNotification -Text '$escaped_title', '$escaped_body'" && return 0
+    else
+      "$ps_path" -NoProfile -NonInteractive -Command "New-BurntToastNotification -Text '$escaped_title'" && return 0
+    fi
+  fi
+
+  "$ps_path" -NoProfile -NonInteractive -Command "
+    [reflection.assembly]::loadwithpartialname('System.Windows.Forms') | Out-Null;
+    [reflection.assembly]::loadwithpartialname('System.Drawing') | Out-Null;
+    \$notification = New-Object System.Windows.Forms.NotifyIcon;
+    \$notification.Icon = [System.Drawing.SystemIcons]::Information;
+    \$notification.BalloonTipIcon = 'Info';
+    \$notification.BalloonTipTitle = '$escaped_title';
+    \$notification.BalloonTipText = '$escaped_body';
+    \$notification.Visible = \$true;
+    \$notification.ShowBalloonTip(5000);
+    Start-Sleep -Seconds 5;
+    \$notification.Dispose();
+  " >/dev/null 2>&1
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -a|--app-name)
@@ -69,6 +118,10 @@ esac
 
 summary=$1
 body=${2-}
+
+if is_wsl; then
+  send_wsl_notification && exit 0
+fi
 
 uid=$(id -u)
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$uid}

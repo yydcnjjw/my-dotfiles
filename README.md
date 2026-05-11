@@ -35,22 +35,25 @@ chezmoi apply
 
 This repo includes two notification helpers:
 
-- `local-notify`: runs `notify-send` on the destination desktop machine's local session.
+- `local-notify`: displays a notification on the current machine. On Linux desktops it runs `notify-send` with the active user session bus; on WSL2 it sends a Windows toast notification through PowerShell.
 - `remote-notify`: connects over `SSH` and asks the destination machine to run `local-notify`.
 
 ### Desktop Host Requirements
 
-The destination desktop machine needs:
+The destination desktop machine needs `local-notify` installed from this repo.
+
+Linux desktop targets also need:
 
 - `notify-send`
 - an active user session with the usual user bus at `/run/user/<uid>/bus`
-- `local-notify` installed from this repo
+
+WSL2 targets need a usable Windows PowerShell path. BurntToast is optional; without it, `local-notify` falls back to Windows Forms.
 
 `local-notify` only exports `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` for the local user session before running `notify-send`. It does not expose the full session bus directly over the network.
 
 ### Remote Setup
 
-On the remote shell where you want to send notifications back to your desktop, make sure `remote-notify` is installed and point `REMOTE_NOTIFY_HOST` at the desktop machine that should display them:
+On the sending machine, install `remote-notify` from this repo and point `REMOTE_NOTIFY_HOST` at the desktop machine that should display notifications. On that desktop target, install `local-notify` from this repo:
 
 ```bash
 export REMOTE_NOTIFY_HOST="your-desktop"
@@ -80,3 +83,5 @@ remote-notify --host "your-desktop" "deploy complete"
 - If `REMOTE_NOTIFY_HOST` is not set, it falls back to the original local `notify-send` binary.
 
 This keeps normal local notifications working while letting the same `notify-send` command route through the remote wrapper when the environment variable is present.
+
+Gemini and OpenCode notification hooks use the same routing rule directly: if `REMOTE_NOTIFY_HOST` is non-empty and `remote-notify` is available they call `remote-notify`, otherwise they call `local-notify`. This avoids relying on interactive shell functions in non-interactive hook processes.
