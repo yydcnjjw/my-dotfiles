@@ -444,7 +444,6 @@ windowrule {
 
 
 {{- $local_config := joinPath .chezmoi.homeDir ".config/hypr/hyprland.local.conf" -}}
-{{- if (stat $local_config) -}}
-# custom config
+{{ if (stat $local_config) }}
 source = ~/.config/hypr/hyprland.local.conf
-{{- end -}}
+{{ end }}
