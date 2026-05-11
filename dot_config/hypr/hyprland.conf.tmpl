@@ -384,11 +384,16 @@ windowrule {
 
 # Special window rules
 windowrule {
-    name = flameshot-rules
-    match:class = ^(flameshot)$
-    float = yes
-    move = 0 0
+    name = flameshot
+    match:class = flameshot
+
+    animation = fade
+    rounding = 0
     border_size = 0
+    fullscreen_state = 0 0
+    float = on
+    pin = on
+    move = 0 0
 }
 
 windowrule {
@@ -436,3 +441,10 @@ windowrule {
     move = center
     workspace = special:dropdown
 }
+
+
+{{- $local_config := joinPath .chezmoi.homeDir ".config/hypr/hyprland.local.conf" -}}
+{{- if (stat $local_config) -}}
+# custom config
+source = ~/.config/hypr/hyprland.local.conf
+{{- end -}}
