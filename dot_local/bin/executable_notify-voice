@@ -17,7 +17,7 @@ DEFAULT_AUDIO_FORMAT = "wav"
 FALLBACK_TEXT = "通知があります"
 MAX_CACHE_FILES = 50
 GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions"
-LOCAL_TTS_TIMEOUT_SECONDS = 8
+LOCAL_TTS_TIMEOUT_SECONDS = 30
 
 
 def cache_key(text, tts_url, audio_format):
