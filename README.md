@@ -85,3 +85,20 @@ remote-notify --host "your-desktop" "deploy complete"
 This keeps normal local notifications working while letting the same `notify-send` command route through the remote wrapper when the environment variable is present.
 
 Gemini and OpenCode notification hooks use the same routing rule directly: if `REMOTE_NOTIFY_HOST` is non-empty and `remote-notify` is available they call `remote-notify`, otherwise they call `local-notify`. This avoids relying on interactive shell functions in non-interactive hook processes.
+
+### Notification Voice
+
+`local-notify` can play a short Japanese voice message before showing the text notification. The voice is generated on the machine that displays the notification, so `remote-notify` automatically plays audio on the destination desktop host.
+
+Voice support uses `notify-voice`, GitHub Models API, and a local HTTP TTS service. Configure `GITHUB_TOKEN` on the desktop host for text polishing. The TTS request defaults to `http://localhost:8000/tts` and sends `{"text": "...", "lang": "Japanese", "translate": false}`. If the GitHub Models request fails, the spoken fallback is `通知があります`.
+
+`local-notify` still shows the text notification even if `notify-voice` succeeds or fails.
+
+Useful environment variables:
+
+- `NOTIFY_VOICE_ENABLED=0`: disable voice playback.
+- `NOTIFY_VOICE_TIMEOUT=20`: maximum seconds `local-notify` waits for voice playback before showing the text notification.
+- `NOTIFY_VOICE_TEXT_MODEL=gpt-4o-mini`: GitHub Models text model.
+- `NOTIFY_VOICE_TTS_URL=http://localhost:8000/tts`: local TTS service URL.
+
+Generated audio is cached under `${XDG_CACHE_HOME:-~/.cache}/notify-voice/` as `wav` files. The cache keeps at most 50 files and removes the least recently used files first.

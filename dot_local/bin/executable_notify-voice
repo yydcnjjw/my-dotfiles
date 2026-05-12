@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+from urllib import error, request
+
+
+DEFAULT_TEXT_MODEL = "gpt-4o-mini"
+DEFAULT_TTS_URL = "http://localhost:8000/tts"
+DEFAULT_AUDIO_FORMAT = "wav"
+FALLBACK_TEXT = "通知があります"
+MAX_CACHE_FILES = 50
+GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions"
+LOCAL_TTS_TIMEOUT_SECONDS = 8
+
+
+def cache_key(text, tts_url, audio_format):
+    payload = "\0".join([text, tts_url, audio_format])
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def cache_dir(env=os.environ):
+    xdg_cache_home = env.get("XDG_CACHE_HOME")
+    if xdg_cache_home:
+        return Path(xdg_cache_home) / "notify-voice"
+    return Path(env.get("HOME", str(Path.home()))) / ".cache" / "notify-voice"
+
+
+def audio_path(directory, key):
+    return Path(directory) / f"{key}.{DEFAULT_AUDIO_FORMAT}"
+
+
+def prune_cache(directory, max_files=MAX_CACHE_FILES):
+    files = [
+        path
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix == ".wav" and not path.name.startswith(".")
+    ]
+    if len(files) <= max_files:
+        return
+    files.sort(key=lambda path: path.stat().st_mtime)
+    for path in files[: len(files) - max_files]:
+        path.unlink(missing_ok=True)
+
+
+def player_command(which=shutil.which):
+    candidates = [
+        ["mpv", "--no-terminal", "--really-quiet"],
+        ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"],
+        ["aplay", "-q"],
+    ]
+    for command in candidates:
+        if which(command[0]):
+            return command
+    return None
+
+
+def build_polish_prompt(summary, body):
+    return (
+        "通知内容の核心的な意味を保ったまま、音声で聞き取りやすい簡潔な日本語にしてください。\n"
+        "短く自然な言い回しにして、出力は読み上げる本文のみを1行で返してください。\n\n"
+        f"summary: {summary}\n"
+        f"body: {body}"
+    )
+
+
+def build_github_models_request(model, summary, body):
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Return exactly one short Japanese sentence for speech playback. "
+                    "Reply with the spoken text only."
+                ),
+            },
+            {"role": "user", "content": build_polish_prompt(summary, body)},
+        ],
+        "temperature": 0.2,
+    }
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+
+def extract_model_text(response_json):
+    try:
+        content = response_json["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        return FALLBACK_TEXT
+
+    if isinstance(content, list):
+        text_parts = [item.get("text", "") for item in content if isinstance(item, dict)]
+        content = "\n".join(part for part in text_parts if part)
+    if not isinstance(content, str):
+        return FALLBACK_TEXT
+    return clean_spoken_text(content)
+
+
+def github_models_request(payload, token):
+    req = request.Request(
+        GITHUB_MODELS_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    return request.urlopen(req, timeout=8)
+
+
+def build_local_tts_request(text):
+    payload = {
+        "text": text,
+        "lang": "Japanese",
+        "translate": False,
+    }
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+
+def local_tts_request(payload):
+    tts_url = os.environ.get("NOTIFY_VOICE_TTS_URL", DEFAULT_TTS_URL)
+    req = request.Request(
+        tts_url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    return request.urlopen(req, timeout=LOCAL_TTS_TIMEOUT_SECONDS)
+
+
+def clean_spoken_text(output):
+    for line in output.splitlines():
+        text = line.strip().strip('"\'“”‘’')
+        if text:
+            return text
+    return FALLBACK_TEXT
+
+
+def is_valid_wav_response(response_body, content_type=None):
+    if not content_type:
+        return False
+
+    normalized = content_type.lower()
+    if not any(token in normalized for token in ("wav", "wave", "audio/wav", "audio/x-wav")):
+        return False
+
+    if not isinstance(response_body, bytes) or len(response_body) < 12:
+        return False
+    if not response_body.startswith(b"RIFF"):
+        return False
+    if b"WAVE" not in response_body[:64]:
+        return False
+
+    return True
+
+
+def polish_text(summary, body):
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        print("notify-voice: GITHUB_TOKEN is not set", file=sys.stderr)
+        return FALLBACK_TEXT
+
+    model = os.environ.get("NOTIFY_VOICE_TEXT_MODEL", DEFAULT_TEXT_MODEL)
+    payload = build_github_models_request(model, summary, body)
+
+    try:
+        with github_models_request(payload, token) as response:
+            response_body = response.read()
+            if not 200 <= getattr(response, "status", 500) < 300:
+                return FALLBACK_TEXT
+    except error.HTTPError as exc:
+        print(f"notify-voice: GitHub Models failed: {exc}", file=sys.stderr)
+        return FALLBACK_TEXT
+    except (error.URLError, OSError) as exc:
+        print(f"notify-voice: GitHub Models failed: {exc}", file=sys.stderr)
+        return FALLBACK_TEXT
+
+    try:
+        response_json = json.loads(response_body)
+    except json.JSONDecodeError:
+        return FALLBACK_TEXT
+
+    return extract_model_text(response_json)
+
+
+def synthesize_to_file(text, path):
+    path = Path(path)
+    tmp_file = None
+    tmp_path = None
+
+    try:
+        tmp_file = tempfile.NamedTemporaryFile(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        )
+        tmp_path = Path(tmp_file.name)
+        tmp_file.close()
+
+        payload = build_local_tts_request(text)
+        with local_tts_request(payload) as response:
+            response_body = response.read()
+            content_type = response.getheader("Content-Type")
+            if not 200 <= getattr(response, "status", 500) < 300:
+                print("notify-voice: local TTS returned error", file=sys.stderr)
+                return False
+            if not response_body:
+                print("notify-voice: local TTS returned empty audio", file=sys.stderr)
+                return False
+            if not is_valid_wav_response(response_body, content_type):
+                print("notify-voice: local TTS returned invalid wav", file=sys.stderr)
+                return False
+
+        tmp_path.write_bytes(response_body)
+        os.replace(tmp_path, path)
+    except error.HTTPError as exc:
+        print(f"notify-voice: local TTS HTTP {exc.code}", file=sys.stderr)
+        return False
+    except error.URLError as exc:
+        print(f"notify-voice: local TTS request failed: {exc.reason}", file=sys.stderr)
+        return False
+    except OSError as exc:
+        print(f"notify-voice: local TTS file error: {exc}", file=sys.stderr)
+        return False
+    except Exception as exc:
+        print(f"notify-voice: local TTS failed: {exc}", file=sys.stderr)
+        return False
+    finally:
+        if tmp_file is not None and not tmp_file.closed:
+            tmp_file.close()
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+    return True
+
+
+def play_audio(path):
+    command = player_command()
+    if not command:
+        print("notify-voice: no audio player found", file=sys.stderr)
+        return False
+
+    try:
+        result = subprocess.run([*command, str(path)], check=False)
+    except OSError as error:
+        print(f"notify-voice: player failed: {error}", file=sys.stderr)
+        return False
+
+    if result.returncode != 0:
+        print(f"notify-voice: player exited with {result.returncode}", file=sys.stderr)
+        return False
+    return True
+
+
+def notify_voice(summary, body):
+    if os.environ.get("NOTIFY_VOICE_ENABLED") == "0":
+        return 0
+
+    try:
+        tts_url = os.environ.get("NOTIFY_VOICE_TTS_URL", DEFAULT_TTS_URL)
+        text = polish_text(summary, body)
+
+        directory = cache_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        path = audio_path(directory, cache_key(text, tts_url, DEFAULT_AUDIO_FORMAT))
+
+        if path.exists():
+            path.touch()
+        elif not synthesize_to_file(text, path):
+            return 1
+
+        prune_cache(directory)
+        return 0 if play_audio(path) else 1
+    except Exception as error:
+        print(f"notify-voice: {error}", file=sys.stderr)
+        return 1
+
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+    if "--help" in argv:
+        print("Usage: notify-voice [summary] [body]")
+        return 0
+    if len(argv) > 2:
+        print("Usage: notify-voice [summary] [body]", file=sys.stderr)
+        return 2
+    summary = argv[0] if argv else ""
+    body = argv[1] if len(argv) > 1 else ""
+    return notify_voice(summary, body)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

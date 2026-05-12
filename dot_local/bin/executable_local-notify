@@ -68,6 +68,19 @@ send_wsl_notification() {
   " >/dev/null 2>&1
 }
 
+run_voice_notification() {
+  [ "${NOTIFY_VOICE_ENABLED:-1}" != "0" ] || return 0
+  command -v notify-voice >/dev/null 2>&1 || return 0
+  command -v timeout >/dev/null 2>&1 || return 0
+
+  voice_timeout=${NOTIFY_VOICE_TIMEOUT:-20}
+  case "$voice_timeout" in
+    ""|*[!0-9]* ) voice_timeout=20 ;;
+  esac
+
+  timeout "$voice_timeout" notify-voice "$summary" "$body" >/dev/null 2>&1 || true
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -a|--app-name)
@@ -120,8 +133,11 @@ summary=$1
 body=${2-}
 
 if is_wsl; then
-  send_wsl_notification && exit 0
+  send_wsl_notification
+  exit $?
 fi
+
+run_voice_notification
 
 uid=$(id -u)
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$uid}

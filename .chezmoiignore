@@ -25,3 +25,5 @@ docs/
 run_onchange_after_ttrss-deploy.sh.tmpl
 .config/systemd/user/ttrss.service.tmpl
 {{- end }}
+
+tests/
