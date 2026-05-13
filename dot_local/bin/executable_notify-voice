@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import random
 import shutil
 import subprocess
 import sys
@@ -18,10 +19,20 @@ DEFAULT_OPENAI_TIMEOUT_SECONDS = 5
 DEFAULT_OPENAI_BASE_URL = "http://10.30.254.33:7777"
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 FALLBACK_TEXT = "通知があります"
+FALLBACK_TEXTS = [
+    "ほら、ちゃんと確認しなさいよ！",
+    "ちょっと、早く確認しなさいってば！",
+    "べつにあんたのためじゃないけど、ちゃんと見なさいよ！",
+    "ほら、通知なんだからさっさと確認しなさいよ！",
+    "なによ、気づいてるならちゃんと確認しなさいよ！",
+]
 MAX_CACHE_FILES = 50
 LOCAL_TTS_TIMEOUT_SECONDS = 30
 DEBUG_LOG_NAME = "debug.log"
 DEBUG_LOG_MAX_BYTES = 1024 * 1024
+EMPTY_SPOKEN_TEXT = object()
+
+_last_fallback_text = None
 
 
 def cache_key(text, tts_url, audio_format):
@@ -180,12 +191,27 @@ def local_tts_request(payload):
     return request.urlopen(req, timeout=LOCAL_TTS_TIMEOUT_SECONDS)
 
 
+def is_fallback_text(text):
+    return text == FALLBACK_TEXT or text in FALLBACK_TEXTS
+
+
+def select_fallback_text():
+    global _last_fallback_text
+
+    candidates = FALLBACK_TEXTS
+    if len(candidates) > 1:
+        candidates = [text for text in candidates if text != _last_fallback_text]
+    text = random.choice(candidates)
+    _last_fallback_text = text
+    return text
+
+
 def clean_spoken_text(output):
     for line in output.splitlines():
         text = line.strip().strip('"\'“”‘’')
         if text:
             return text
-    return FALLBACK_TEXT
+    return EMPTY_SPOKEN_TEXT
 
 
 def extract_openai_output_text(payload):
@@ -251,7 +277,7 @@ def polish_text(summary, body):
         cached_text = None
     else:
         text = clean_spoken_text(cached_text)
-        if text != FALLBACK_TEXT:
+        if text is not EMPTY_SPOKEN_TEXT and not is_fallback_text(text):
             safe_append_debug_log(directory, f"polish cache hit key={cache_path.stem[:8]}")
             return text
 
@@ -271,41 +297,44 @@ def polish_text(summary, body):
     except error.HTTPError as exc:
         safe_append_debug_log(directory, f"openai http error status={exc.code}")
         print(f"notify-voice: OpenAI API HTTP {exc.code}", file=sys.stderr)
-        return FALLBACK_TEXT
+        return select_fallback_text()
     except TimeoutError:
         safe_append_debug_log(directory, "openai timeout")
         print("notify-voice: OpenAI API timed out", file=sys.stderr)
-        return FALLBACK_TEXT
+        return select_fallback_text()
     except error.URLError as exc:
         if isinstance(exc.reason, TimeoutError):
             safe_append_debug_log(directory, "openai timeout")
             print("notify-voice: OpenAI API timed out", file=sys.stderr)
-            return FALLBACK_TEXT
+            return select_fallback_text()
         safe_append_debug_log(directory, "openai request failed")
         print(f"notify-voice: OpenAI API request failed: {exc.reason}", file=sys.stderr)
-        return FALLBACK_TEXT
+        return select_fallback_text()
     except OSError as exc:
         safe_append_debug_log(directory, "openai os error")
         print(f"notify-voice: OpenAI API failed: {exc}", file=sys.stderr)
-        return FALLBACK_TEXT
+        return select_fallback_text()
 
     try:
         payload = json.loads(body_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         safe_append_debug_log(directory, "openai invalid response")
         print("notify-voice: OpenAI API returned invalid JSON", file=sys.stderr)
-        return FALLBACK_TEXT
+        return select_fallback_text()
 
     raw_text = extract_openai_output_text(payload)
     if not raw_text:
         safe_append_debug_log(directory, "openai invalid response")
         print("notify-voice: OpenAI API returned no text", file=sys.stderr)
-        return FALLBACK_TEXT
+        return select_fallback_text()
 
     text = clean_spoken_text(raw_text)
-    if text == FALLBACK_TEXT:
+    if text is EMPTY_SPOKEN_TEXT:
         safe_append_debug_log(directory, "openai returned fallback text")
-        return FALLBACK_TEXT
+        return select_fallback_text()
+    if is_fallback_text(text):
+        safe_append_debug_log(directory, "openai returned fallback text")
+        return select_fallback_text()
 
     safe_append_debug_log(directory, f'openai success model="{model}"')
 
