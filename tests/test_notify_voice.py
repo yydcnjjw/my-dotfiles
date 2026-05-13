@@ -18,6 +18,13 @@ LOCAL_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_local-notify"
 REMOTE_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_remote-notify"
 OPENCODE_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_opencode-notify"
 GEMINI_NOTIFY_SCRIPT = ROOT / "dot_gemini" / "executable_notify.sh"
+EXPECTED_FALLBACK_TEXTS = [
+    "ほら、ちゃんと確認しなさいよ！",
+    "ちょっと、早く確認しなさいってば！",
+    "べつにあんたのためじゃないけど、ちゃんと見なさいよ！",
+    "ほら、通知なんだからさっさと確認しなさいよ！",
+    "なによ、気づいてるならちゃんと確認しなさいよ！",
+]
 
 
 def load_module():
@@ -218,8 +225,56 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             },
         )
 
-    def test_clean_spoken_text_uses_fallback_for_empty_output(self):
-        self.assertEqual(self.module.clean_spoken_text("\n  \n"), self.module.FALLBACK_TEXT)
+    def test_fallback_texts_match_expected_pool(self):
+        self.assertEqual(len(self.module.FALLBACK_TEXTS), 5)
+        self.assertCountEqual(self.module.FALLBACK_TEXTS, EXPECTED_FALLBACK_TEXTS)
+
+    def test_is_fallback_text_accepts_legacy_single_fallback_text(self):
+        self.assertTrue(self.module.is_fallback_text("通知があります"))
+
+    def test_select_fallback_text_returns_value_from_pool(self):
+        text = self.module.select_fallback_text()
+        self.assertIn(text, self.module.FALLBACK_TEXTS)
+        self.assertEqual(self.module._last_fallback_text, text)
+
+    def test_select_fallback_text_avoids_repeating_previous_text(self):
+        previous_text = "ほら、ちゃんと確認しなさいよ！"
+        selected_text = "なによ、気づいてるならちゃんと確認しなさいよ！"
+        self.module._last_fallback_text = previous_text
+
+        with mock.patch.object(
+            self.module,
+            "FALLBACK_TEXTS",
+            [previous_text, selected_text],
+            create=True,
+        ):
+            text = self.module.select_fallback_text()
+
+        self.assertEqual(text, selected_text)
+        self.assertIn(text, self.module.FALLBACK_TEXTS)
+        self.assertEqual(self.module._last_fallback_text, selected_text)
+
+    def test_select_fallback_text_uses_random_choice_with_previous_text_removed(self):
+        previous_text = "ほら、ちゃんと確認しなさいよ！"
+        selected_text = "ちょっと、早く確認しなさいってば！"
+        self.module._last_fallback_text = previous_text
+
+        with mock.patch.object(
+            self.module,
+            "FALLBACK_TEXTS",
+            [previous_text, selected_text, "なによ、気づいてるならちゃんと確認しなさいよ！"],
+            create=True,
+        ), mock.patch.object(self.module.random, "choice", return_value=selected_text) as choice:
+            text = self.module.select_fallback_text()
+
+        choice.assert_called_once_with(
+            [selected_text, "なによ、気づいてるならちゃんと確認しなさいよ！"]
+        )
+        self.assertEqual(text, selected_text)
+        self.assertEqual(self.module._last_fallback_text, selected_text)
+
+    def test_clean_spoken_text_returns_empty_spoken_text_sentinel_for_empty_output(self):
+        self.assertIs(self.module.clean_spoken_text("\n  \n"), self.module.EMPTY_SPOKEN_TEXT)
 
     def test_clean_spoken_text_returns_first_non_empty_line(self):
         self.assertEqual(self.module.clean_spoken_text("完了しました。\n説明"), "完了しました。")
@@ -723,8 +778,16 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
     def test_polish_text_does_not_cache_fallback_after_openai_timeout(self):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
-                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
-                self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")), \
+                 mock.patch.object(
+                     self.module,
+                     "select_fallback_text",
+                     return_value="なによ、気づいてるならちゃんと確認しなさいよ！",
+                 ):
+                self.assertEqual(
+                    self.module.polish_text("summary", "body"),
+                    "なによ、気づいてるならちゃんと確認しなさいよ！",
+                )
 
             cache_path = self.module.polish_cache_path(
                 self.module.cache_dir({"XDG_CACHE_HOME": tmp}),
@@ -735,8 +798,18 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
     def test_polish_text_falls_back_when_openai_times_out(self):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
-                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
-                self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")), \
+                 mock.patch.object(
+                     self.module,
+                     "select_fallback_text",
+                     return_value="ちょっと、早く確認しなさいってば！",
+                 ) as select_fallback_text:
+                self.assertEqual(
+                    self.module.polish_text("summary", "body"),
+                    "ちょっと、早く確認しなさいってば！",
+                )
+
+        select_fallback_text.assert_called_once_with()
 
     def test_polish_text_falls_back_when_openai_returns_invalid_json(self):
         class FakeResponse:
@@ -756,14 +829,70 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
-                 mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
-                self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+                 mock.patch("urllib.request.urlopen", return_value=FakeResponse()), \
+                 mock.patch.object(
+                     self.module,
+                     "select_fallback_text",
+                     return_value="ほら、ちゃんと確認しなさいよ！",
+                 ):
+                self.assertEqual(
+                    self.module.polish_text("summary", "body"),
+                    "ほら、ちゃんと確認しなさいよ！",
+                )
+
+    def test_polish_text_selects_fallback_once_when_cleaned_openai_text_is_empty(self):
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                return json.dumps({"output_text": '  ""  '}).encode("utf-8")
+
+            def getheader(self, name, default=None):
+                return "application/json"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen", return_value=FakeResponse()), \
+                 mock.patch.object(
+                     self.module,
+                     "FALLBACK_TEXTS",
+                     ["ほら、ちゃんと確認しなさいよ！", "ちょっと、早く確認しなさいってば！"],
+                     create=True,
+                 ), \
+                 mock.patch.object(
+                     self.module,
+                     "select_fallback_text",
+                     side_effect=[
+                         "ほら、ちゃんと確認しなさいよ！",
+                         "ちょっと、早く確認しなさいってば！",
+                     ],
+                 ) as select_fallback_text:
+                self.assertEqual(
+                    self.module.polish_text("summary", "body"),
+                    "ほら、ちゃんと確認しなさいよ！",
+                )
+
+        select_fallback_text.assert_called_once_with()
 
     def test_polish_text_writes_debug_log_for_openai_timeout(self):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
-                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
-                self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")), \
+                 mock.patch.object(
+                     self.module,
+                     "select_fallback_text",
+                     return_value="ほら、通知なんだからさっさと確認しなさいよ！",
+                 ):
+                self.assertEqual(
+                    self.module.polish_text("summary", "body"),
+                    "ほら、通知なんだからさっさと確認しなさいよ！",
+                )
 
             log_text = (Path(tmp) / "notify-voice" / "debug.log").read_text(encoding="utf-8")
             self.assertIn("openai timeout", log_text)
