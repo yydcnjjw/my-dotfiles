@@ -162,13 +162,17 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
         command = self.module.player_command(lambda name: "/usr/bin/aplay" if name == "aplay" else None)
         self.assertEqual(command, ["aplay", "-q"])
 
-    def test_build_copilot_prompt_contains_summary_body_and_output_constraints(self):
+    def test_build_copilot_prompt_contains_summary_body_output_and_tone_style_constraints(self):
         prompt = self.module.build_copilot_prompt("OpenCode - Notification", "Task finished")
         self.assertIn("OpenCode - Notification", prompt)
         self.assertIn("Task finished", prompt)
         self.assertIn("日本語", prompt)
         self.assertIn("1文", prompt)
         self.assertIn("本文のみ", prompt)
+        self.assertIn("少しツンデレ", prompt)
+        self.assertIn("軽くたしなめる", prompt)
+        self.assertIn("大げさになりすぎない", prompt)
+        self.assertIn("決まり文句", prompt)
 
     def test_openai_timeout_seconds_uses_default_for_invalid_values(self):
         self.assertEqual(self.module.openai_timeout_seconds({}), 5)
