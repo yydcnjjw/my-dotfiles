@@ -7,7 +7,7 @@ export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 export HTTP_PROXY=http://{{ .proxy_ip }}:{{ .http_port }}
 export HTTPS_PROXY=http://{{ .proxy_ip }}:{{ .http_port }}
 export ALL_PROXY=socks5h://{{ .proxy_ip }}:{{ .socks_port }}
-export NO_PROXY=localhost,127.0.0.1,::1
+export NO_PROXY=$NO_PROXY,localhost,127.0.0.1,::1
 
 export EDITOR='emacsclient -nw'
 

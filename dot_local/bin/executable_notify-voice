@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -11,13 +12,16 @@ import tempfile
 from urllib import error, request
 
 
-DEFAULT_TEXT_MODEL = "gpt-4o-mini"
 DEFAULT_TTS_URL = "http://localhost:8000/tts"
 DEFAULT_AUDIO_FORMAT = "wav"
+DEFAULT_OPENAI_TIMEOUT_SECONDS = 5
+DEFAULT_OPENAI_BASE_URL = "http://10.30.254.33:7777"
+DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 FALLBACK_TEXT = "通知があります"
 MAX_CACHE_FILES = 50
-GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions"
 LOCAL_TTS_TIMEOUT_SECONDS = 30
+DEBUG_LOG_NAME = "debug.log"
+DEBUG_LOG_MAX_BYTES = 1024 * 1024
 
 
 def cache_key(text, tts_url, audio_format):
@@ -36,17 +40,69 @@ def audio_path(directory, key):
     return Path(directory) / f"{key}.{DEFAULT_AUDIO_FORMAT}"
 
 
-def prune_cache(directory, max_files=MAX_CACHE_FILES):
-    files = [
-        path
-        for path in directory.iterdir()
-        if path.is_file() and path.suffix == ".wav" and not path.name.startswith(".")
-    ]
-    if len(files) <= max_files:
+def polish_cache_key(summary, body, model):
+    payload = "\0".join([summary, body, model])
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def polish_cache_path(directory, key):
+    return Path(directory) / f"{key}.txt"
+
+
+def debug_log_path(directory):
+    return Path(directory) / DEBUG_LOG_NAME
+
+
+def trim_debug_log(directory, max_bytes=DEBUG_LOG_MAX_BYTES):
+    path = debug_log_path(directory)
+    try:
+        size = path.stat().st_size
+        if size <= max_bytes:
+            return
+        with path.open("rb") as handle:
+            handle.seek(max(size - max_bytes, 0), os.SEEK_SET)
+            content = handle.read()
+        if size > max_bytes and b"\n" in content:
+            content = content.split(b"\n", 1)[1]
+        with path.open("wb") as handle:
+            handle.write(content[-max_bytes:])
+    except FileNotFoundError:
         return
-    files.sort(key=lambda path: path.stat().st_mtime)
-    for path in files[: len(files) - max_files]:
-        path.unlink(missing_ok=True)
+    except OSError:
+        return
+
+
+def append_debug_log(directory, message):
+    path = debug_log_path(directory)
+    line = f"{datetime.now().isoformat(timespec='seconds')} notify-voice: {message}\n"
+    try:
+        Path(directory).mkdir(parents=True, exist_ok=True)
+        trim_debug_log(directory)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(line)
+    except OSError:
+        return
+
+
+def safe_append_debug_log(directory, message):
+    try:
+        append_debug_log(directory, message)
+    except OSError:
+        return
+
+
+def prune_cache(directory, max_files=MAX_CACHE_FILES):
+    for suffix in (".wav", ".txt"):
+        files = [
+            path
+            for path in directory.iterdir()
+            if path.is_file() and path.suffix == suffix and not path.name.startswith(".")
+        ]
+        if len(files) <= max_files:
+            continue
+        files.sort(key=lambda path: path.stat().st_mtime)
+        for path in files[: len(files) - max_files]:
+            path.unlink(missing_ok=True)
 
 
 def player_command(which=shutil.which):
@@ -61,59 +117,43 @@ def player_command(which=shutil.which):
     return None
 
 
-def build_polish_prompt(summary, body):
+def build_copilot_prompt(summary, body):
     return (
         "通知内容の核心的な意味を保ったまま、音声で聞き取りやすい簡潔な日本語にしてください。\n"
-        "短く自然な言い回しにして、出力は読み上げる本文のみを1行で返してください。\n\n"
+        "短く自然な言い回しにして、出力は読み上げる本文のみを1文で返してください。\n"
+        "説明、前置き、Markdown、引用符は不要です。\n\n"
         f"summary: {summary}\n"
         f"body: {body}"
     )
 
 
-def build_github_models_request(model, summary, body):
+def openai_base_url(env=os.environ):
+    return env.get("NOTIFY_VOICE_OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL).rstrip("/")
+
+
+def openai_model(env=os.environ):
+    return env.get("NOTIFY_VOICE_OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+
+
+def openai_timeout_seconds(env=os.environ):
+    raw = env.get("NOTIFY_VOICE_OPENAI_TIMEOUT", str(DEFAULT_OPENAI_TIMEOUT_SECONDS))
+    try:
+        timeout = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_OPENAI_TIMEOUT_SECONDS
+    return timeout if timeout > 0 else DEFAULT_OPENAI_TIMEOUT_SECONDS
+
+
+def openai_responses_url(env=os.environ):
+    return f"{openai_base_url(env)}/v1/responses"
+
+
+def build_openai_responses_request(model, prompt):
     payload = {
         "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "Return exactly one short Japanese sentence for speech playback. "
-                    "Reply with the spoken text only."
-                ),
-            },
-            {"role": "user", "content": build_polish_prompt(summary, body)},
-        ],
-        "temperature": 0.2,
+        "input": prompt,
     }
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
-
-
-def extract_model_text(response_json):
-    try:
-        content = response_json["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        return FALLBACK_TEXT
-
-    if isinstance(content, list):
-        text_parts = [item.get("text", "") for item in content if isinstance(item, dict)]
-        content = "\n".join(part for part in text_parts if part)
-    if not isinstance(content, str):
-        return FALLBACK_TEXT
-    return clean_spoken_text(content)
-
-
-def github_models_request(payload, token):
-    req = request.Request(
-        GITHUB_MODELS_URL,
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        method="POST",
-    )
-    return request.urlopen(req, timeout=8)
 
 
 def build_local_tts_request(text):
@@ -146,6 +186,35 @@ def clean_spoken_text(output):
     return FALLBACK_TEXT
 
 
+def extract_openai_output_text(payload):
+    text = payload.get("output_text")
+    if isinstance(text, str) and text.strip():
+        return text
+
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return None
+
+    parts = []
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") in {"output_text", "text"}:
+                value = part.get("text")
+                if isinstance(value, str) and value.strip():
+                    parts.append(value)
+
+    if not parts:
+        return None
+    return "\n".join(parts)
+
+
 def is_valid_wav_response(response_body, content_type=None):
     if not content_type:
         return False
@@ -165,32 +234,87 @@ def is_valid_wav_response(response_body, content_type=None):
 
 
 def polish_text(summary, body):
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        print("notify-voice: GITHUB_TOKEN is not set", file=sys.stderr)
-        return FALLBACK_TEXT
-
-    model = os.environ.get("NOTIFY_VOICE_TEXT_MODEL", DEFAULT_TEXT_MODEL)
-    payload = build_github_models_request(model, summary, body)
+    directory = cache_dir()
+    model = openai_model()
+    cache_path = polish_cache_path(directory, polish_cache_key(summary, body, model))
+    safe_append_debug_log(directory, f'polish start model="{model}"')
 
     try:
-        with github_models_request(payload, token) as response:
-            response_body = response.read()
-            if not 200 <= getattr(response, "status", 500) < 300:
-                return FALLBACK_TEXT
+        cached_text = cache_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        safe_append_debug_log(directory, f"polish cache miss key={cache_path.stem[:8]}")
+        cached_text = None
+    except OSError:
+        safe_append_debug_log(directory, f"polish cache read failed key={cache_path.stem[:8]}")
+        cached_text = None
+    else:
+        text = clean_spoken_text(cached_text)
+        if text != FALLBACK_TEXT:
+            safe_append_debug_log(directory, f"polish cache hit key={cache_path.stem[:8]}")
+            return text
+
+    prompt = build_copilot_prompt(summary, body)
+    req = request.Request(
+        openai_responses_url(),
+        data=build_openai_responses_request(model, prompt),
+        headers={
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(req, timeout=openai_timeout_seconds()) as response:
+            body_bytes = response.read()
     except error.HTTPError as exc:
-        print(f"notify-voice: GitHub Models failed: {exc}", file=sys.stderr)
+        safe_append_debug_log(directory, f"openai http error status={exc.code}")
+        print(f"notify-voice: OpenAI API HTTP {exc.code}", file=sys.stderr)
         return FALLBACK_TEXT
-    except (error.URLError, OSError) as exc:
-        print(f"notify-voice: GitHub Models failed: {exc}", file=sys.stderr)
+    except TimeoutError:
+        safe_append_debug_log(directory, "openai timeout")
+        print("notify-voice: OpenAI API timed out", file=sys.stderr)
+        return FALLBACK_TEXT
+    except error.URLError as exc:
+        if isinstance(exc.reason, TimeoutError):
+            safe_append_debug_log(directory, "openai timeout")
+            print("notify-voice: OpenAI API timed out", file=sys.stderr)
+            return FALLBACK_TEXT
+        safe_append_debug_log(directory, "openai request failed")
+        print(f"notify-voice: OpenAI API request failed: {exc.reason}", file=sys.stderr)
+        return FALLBACK_TEXT
+    except OSError as exc:
+        safe_append_debug_log(directory, "openai os error")
+        print(f"notify-voice: OpenAI API failed: {exc}", file=sys.stderr)
         return FALLBACK_TEXT
 
     try:
-        response_json = json.loads(response_body)
-    except json.JSONDecodeError:
+        payload = json.loads(body_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        safe_append_debug_log(directory, "openai invalid response")
+        print("notify-voice: OpenAI API returned invalid JSON", file=sys.stderr)
         return FALLBACK_TEXT
 
-    return extract_model_text(response_json)
+    raw_text = extract_openai_output_text(payload)
+    if not raw_text:
+        safe_append_debug_log(directory, "openai invalid response")
+        print("notify-voice: OpenAI API returned no text", file=sys.stderr)
+        return FALLBACK_TEXT
+
+    text = clean_spoken_text(raw_text)
+    if text == FALLBACK_TEXT:
+        safe_append_debug_log(directory, "openai returned fallback text")
+        return FALLBACK_TEXT
+
+    safe_append_debug_log(directory, f'openai success model="{model}"')
+
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(text, encoding="utf-8")
+    except OSError:
+        safe_append_debug_log(directory, f"polish cache write failed key={cache_path.stem[:8]}")
+        pass
+
+    return text
 
 
 def synthesize_to_file(text, path):
@@ -213,27 +337,39 @@ def synthesize_to_file(text, path):
             response_body = response.read()
             content_type = response.getheader("Content-Type")
             if not 200 <= getattr(response, "status", 500) < 300:
+                safe_append_debug_log(path.parent, "local tts returned error")
                 print("notify-voice: local TTS returned error", file=sys.stderr)
                 return False
             if not response_body:
+                safe_append_debug_log(path.parent, "local tts returned empty audio")
                 print("notify-voice: local TTS returned empty audio", file=sys.stderr)
                 return False
             if not is_valid_wav_response(response_body, content_type):
+                safe_append_debug_log(path.parent, "local tts returned invalid wav")
                 print("notify-voice: local TTS returned invalid wav", file=sys.stderr)
                 return False
 
         tmp_path.write_bytes(response_body)
         os.replace(tmp_path, path)
     except error.HTTPError as exc:
-        print(f"notify-voice: local TTS HTTP {exc.code}", file=sys.stderr)
-        return False
+        try:
+            safe_append_debug_log(path.parent, f"local tts http error status={exc.code}")
+            print(f"notify-voice: local TTS HTTP {exc.code}", file=sys.stderr)
+            return False
+        finally:
+            close = getattr(exc, "close", None)
+            if callable(close):
+                close()
     except error.URLError as exc:
+        safe_append_debug_log(path.parent, "local tts request failed")
         print(f"notify-voice: local TTS request failed: {exc.reason}", file=sys.stderr)
         return False
     except OSError as exc:
+        safe_append_debug_log(path.parent, "local tts file error")
         print(f"notify-voice: local TTS file error: {exc}", file=sys.stderr)
         return False
     except Exception as exc:
+        safe_append_debug_log(path.parent, "local tts unexpected failure")
         print(f"notify-voice: local TTS failed: {exc}", file=sys.stderr)
         return False
     finally:
@@ -245,18 +381,22 @@ def synthesize_to_file(text, path):
 
 
 def play_audio(path):
+    path = Path(path)
     command = player_command()
     if not command:
+        safe_append_debug_log(path.parent, "no audio player found")
         print("notify-voice: no audio player found", file=sys.stderr)
         return False
 
     try:
         result = subprocess.run([*command, str(path)], check=False)
-    except OSError as error:
-        print(f"notify-voice: player failed: {error}", file=sys.stderr)
+    except OSError as exc:
+        safe_append_debug_log(path.parent, "player failed")
+        print(f"notify-voice: player failed: {exc}", file=sys.stderr)
         return False
 
     if result.returncode != 0:
+        safe_append_debug_log(path.parent, f"player exit={result.returncode}")
         print(f"notify-voice: player exited with {result.returncode}", file=sys.stderr)
         return False
     return True
@@ -268,21 +408,29 @@ def notify_voice(summary, body):
 
     try:
         tts_url = os.environ.get("NOTIFY_VOICE_TTS_URL", DEFAULT_TTS_URL)
+        directory = cache_dir()
+        safe_append_debug_log(directory, "notify_voice start")
         text = polish_text(summary, body)
 
-        directory = cache_dir()
         directory.mkdir(parents=True, exist_ok=True)
         path = audio_path(directory, cache_key(text, tts_url, DEFAULT_AUDIO_FORMAT))
 
         if path.exists():
+            safe_append_debug_log(directory, f"wav cache hit path={path.name}")
             path.touch()
         elif not synthesize_to_file(text, path):
+            safe_append_debug_log(directory, f"wav synthesis failed path={path.name}")
             return 1
+        else:
+            safe_append_debug_log(directory, f"wav cache miss path={path.name}")
 
         prune_cache(directory)
-        return 0 if play_audio(path) else 1
-    except Exception as error:
-        print(f"notify-voice: {error}", file=sys.stderr)
+        result = 0 if play_audio(path) else 1
+        safe_append_debug_log(directory, f"playback result code={result}")
+        return result
+    except Exception as exc:
+        safe_append_debug_log(cache_dir(), "notify_voice unexpected error")
+        print(f"notify-voice: {exc}", file=sys.stderr)
         return 1
 
 

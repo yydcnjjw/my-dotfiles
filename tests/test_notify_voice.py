@@ -8,8 +8,8 @@ import sys
 import tempfile
 import types
 import unittest
+import warnings
 from unittest import mock
-from urllib import error
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +47,51 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
     def test_cache_dir_falls_back_to_home_cache(self):
         env = {"HOME": "/tmp/example-home"}
         self.assertEqual(self.module.cache_dir(env), Path("/tmp/example-home/.cache/notify-voice"))
+
+    def test_polish_cache_key_includes_summary_body_and_model(self):
+        first = self.module.polish_cache_key("title", "body", "GPT-5 mini")
+        second = self.module.polish_cache_key("title", "body", "GPT-4.1")
+        self.assertNotEqual(first, second)
+        self.assertEqual(len(first), 64)
+
+    def test_polish_cache_path_uses_txt_extension(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.module.polish_cache_path(Path(tmp), "abc123")
+            self.assertEqual(path, Path(tmp) / "abc123.txt")
+
+    def test_debug_log_path_uses_cache_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self.module.debug_log_path(Path(tmp))
+            self.assertEqual(path, Path(tmp) / "debug.log")
+
+    def test_debug_log_appends_single_line_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            self.module.append_debug_log(directory, "first event")
+            self.module.append_debug_log(directory, "second event")
+
+            lines = self.module.debug_log_path(directory).read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertIn("notify-voice: first event", lines[0])
+            self.assertIn("notify-voice: second event", lines[1])
+
+    def test_trim_debug_log_keeps_latest_content_when_over_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            log_path = self.module.debug_log_path(directory)
+            log_path.write_text("old\n" + ("x" * 80) + "\nnew\n", encoding="utf-8")
+
+            self.module.trim_debug_log(directory, max_bytes=32)
+
+            content = log_path.read_text(encoding="utf-8")
+            self.assertIn("new\n", content)
+            self.assertLessEqual(log_path.stat().st_size, 32)
+
+    def test_append_debug_log_ignores_write_failures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            with mock.patch.object(Path, "open", side_effect=OSError("disk full")):
+                self.module.append_debug_log(directory, "event")
 
     def test_prune_cache_keeps_newest_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -87,6 +132,28 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             self.assertTrue(temp_path.exists())
             self.assertTrue(ignored_path.exists())
 
+    def test_prune_cache_limits_text_cache_without_affecting_audio_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            for index in range(55):
+                audio_path = directory / f"audio-{index:02d}.wav"
+                text_path = directory / f"text-{index:02d}.txt"
+                audio_path.write_bytes(b"audio")
+                text_path.write_text("text", encoding="utf-8")
+                os.utime(audio_path, (index, index))
+                os.utime(text_path, (index, index))
+
+            self.module.prune_cache(directory, max_files=50)
+
+            remaining_audio = sorted(path.name for path in directory.glob("*.wav"))
+            remaining_text = sorted(path.name for path in directory.glob("*.txt"))
+            self.assertEqual(len(remaining_audio), 50)
+            self.assertEqual(len(remaining_text), 50)
+            self.assertEqual(remaining_audio[0], "audio-05.wav")
+            self.assertEqual(remaining_audio[-1], "audio-54.wav")
+            self.assertEqual(remaining_text[0], "text-05.txt")
+            self.assertEqual(remaining_text[-1], "text-54.txt")
+
     def test_player_command_uses_first_available_builtin_player(self):
         command = self.module.player_command(lambda name: "/usr/bin/mpv" if name == "mpv" else None)
         self.assertEqual(command, ["mpv", "--no-terminal", "--really-quiet"])
@@ -95,52 +162,91 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
         command = self.module.player_command(lambda name: "/usr/bin/aplay" if name == "aplay" else None)
         self.assertEqual(command, ["aplay", "-q"])
 
-    def test_prompt_contains_summary_body_and_japanese_instruction(self):
-        prompt = self.module.build_polish_prompt("OpenCode - Notification", "Task finished")
+    def test_build_copilot_prompt_contains_summary_body_and_output_constraints(self):
+        prompt = self.module.build_copilot_prompt("OpenCode - Notification", "Task finished")
         self.assertIn("OpenCode - Notification", prompt)
         self.assertIn("Task finished", prompt)
         self.assertIn("日本語", prompt)
-        self.assertIn("簡潔", prompt)
+        self.assertIn("1文", prompt)
+        self.assertIn("本文のみ", prompt)
 
-    def test_build_github_models_request_contains_model_and_messages(self):
-        payload = self.module.build_github_models_request(
-            "gpt-4o-mini",
-            "OpenCode - Notification",
-            "Task finished",
+    def test_openai_timeout_seconds_uses_default_for_invalid_values(self):
+        self.assertEqual(self.module.openai_timeout_seconds({}), 5)
+        self.assertEqual(
+            self.module.openai_timeout_seconds({"NOTIFY_VOICE_OPENAI_TIMEOUT": "abc"}),
+            5,
         )
-        body = json.loads(payload.decode("utf-8"))
-        self.assertEqual(body["model"], "gpt-4o-mini")
-        self.assertEqual(body["temperature"], 0.2)
-        self.assertEqual(body["messages"][0]["role"], "system")
-        self.assertIn("short Japanese sentence", body["messages"][0]["content"])
-        self.assertIn("speech", body["messages"][0]["content"])
-        self.assertEqual(body["messages"][1]["role"], "user")
-        self.assertIn("OpenCode - Notification", body["messages"][1]["content"])
-        self.assertIn("Task finished", body["messages"][1]["content"])
-        self.assertIn("日本語", body["messages"][1]["content"])
-        self.assertIn("簡潔", body["messages"][1]["content"])
+        self.assertEqual(
+            self.module.openai_timeout_seconds({"NOTIFY_VOICE_OPENAI_TIMEOUT": "0"}),
+            5,
+        )
+        self.assertEqual(
+            self.module.openai_timeout_seconds({"NOTIFY_VOICE_OPENAI_TIMEOUT": "7"}),
+            7,
+        )
 
-    def test_github_models_request_posts_json_with_expected_headers(self):
-        response = object()
-        with mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
-            result = self.module.github_models_request(b'{"model":"gpt-4o-mini"}', "token")
+    def test_openai_base_url_and_model_use_defaults(self):
+        self.assertEqual(self.module.openai_base_url({}), "http://10.30.254.33:7777")
+        self.assertEqual(self.module.openai_model({}), "gpt-5-mini")
 
-        self.assertIs(result, response)
-        urlopen.assert_called_once()
+    def test_openai_responses_url_uses_base_url(self):
+        self.assertEqual(
+            self.module.openai_responses_url({}),
+            "http://10.30.254.33:7777/v1/responses",
+        )
+        self.assertEqual(
+            self.module.openai_responses_url({"NOTIFY_VOICE_OPENAI_BASE_URL": "http://example.test/api/"}),
+            "http://example.test/api/v1/responses",
+        )
 
-        req = urlopen.call_args.args[0]
-        self.assertEqual(req.full_url, "https://models.inference.ai.azure.com/chat/completions")
-        self.assertEqual(req.get_method(), "POST")
-        self.assertEqual(req.get_header("Authorization"), "Bearer token")
-        self.assertEqual(req.get_header("Content-type"), "application/json")
-        self.assertEqual(req.get_header("Accept"), "application/json")
-        self.assertEqual(urlopen.call_args.kwargs["timeout"], 8)
+    def test_build_openai_responses_request_contains_model_and_input(self):
+        payload = json.loads(
+            self.module.build_openai_responses_request(
+                "gpt-5-mini",
+                "prompt text",
+            ).decode("utf-8")
+        )
+        self.assertEqual(
+            payload,
+            {
+                "model": "gpt-5-mini",
+                "input": "prompt text",
+            },
+        )
 
     def test_clean_spoken_text_uses_fallback_for_empty_output(self):
         self.assertEqual(self.module.clean_spoken_text("\n  \n"), self.module.FALLBACK_TEXT)
 
     def test_clean_spoken_text_returns_first_non_empty_line(self):
         self.assertEqual(self.module.clean_spoken_text("完了しました。\n説明"), "完了しました。")
+
+    def test_extract_openai_output_text_prefers_top_level_output_text(self):
+        payload = {
+            "output_text": "ビルドが完了しました。",
+            "output": [],
+        }
+        self.assertEqual(
+            self.module.extract_openai_output_text(payload),
+            "ビルドが完了しました。",
+        )
+
+    def test_extract_openai_output_text_falls_back_to_output_content(self):
+        payload = {
+            "output": [
+                {
+                    "content": [
+                        {"type": "output_text", "text": "ビルドが完了しました。"},
+                    ]
+                }
+            ]
+        }
+        self.assertEqual(
+            self.module.extract_openai_output_text(payload),
+            "ビルドが完了しました。",
+        )
+
+    def test_extract_openai_output_text_returns_none_when_missing_text(self):
+        self.assertIsNone(self.module.extract_openai_output_text({"output": []}))
 
     def test_audio_path_uses_wav_extension(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -161,7 +267,8 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
 
     def test_local_tts_request_posts_json_to_default_url(self):
         response = object()
-        with mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
+        with mock.patch.dict(os.environ, {}, clear=True), \
+             mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
             result = self.module.local_tts_request(b'{"text":"a"}')
 
         self.assertIs(result, response)
@@ -204,7 +311,10 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 self.assertFalse(self.module.synthesize_to_file("text", path))
 
             self.assertFalse(path.exists())
-            self.assertEqual(list(Path(tmp).iterdir()), [])
+            self.assertEqual(
+                [entry.name for entry in Path(tmp).iterdir() if entry.name != self.module.DEBUG_LOG_NAME],
+                [],
+            )
 
     def test_synthesize_to_file_uses_unique_temp_paths_for_local_tts(self):
         temp_paths = [
@@ -319,7 +429,10 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 self.assertFalse(self.module.synthesize_to_file("text", path))
 
             self.assertFalse(path.exists())
-            self.assertEqual(list(Path(tmp).iterdir()), [])
+            self.assertEqual(
+                [entry.name for entry in Path(tmp).iterdir() if entry.name != self.module.DEBUG_LOG_NAME],
+                [],
+            )
 
     def test_synthesize_to_file_rejects_missing_content_type(self):
         class MissingContentTypeResponse:
@@ -343,7 +456,10 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 self.assertFalse(self.module.synthesize_to_file("text", path))
 
             self.assertFalse(path.exists())
-            self.assertEqual(list(Path(tmp).iterdir()), [])
+            self.assertEqual(
+                [entry.name for entry in Path(tmp).iterdir() if entry.name != self.module.DEBUG_LOG_NAME],
+                [],
+            )
 
     def test_synthesize_to_file_rejects_fake_wav_content_type_with_invalid_body(self):
         class FakeWavResponse:
@@ -369,7 +485,10 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 self.assertFalse(self.module.synthesize_to_file("text", path))
 
             self.assertFalse(path.exists())
-            self.assertEqual(list(Path(tmp).iterdir()), [])
+            self.assertEqual(
+                [entry.name for entry in Path(tmp).iterdir() if entry.name != self.module.DEBUG_LOG_NAME],
+                [],
+            )
 
     def test_synthesize_to_file_falls_back_for_empty_local_tts_body(self):
         class EmptyResponse:
@@ -418,22 +537,38 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             self.assertFalse(path.exists())
 
     def test_synthesize_to_file_returns_false_for_http_error(self):
+        class CloseTrackingBody:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        response_body = CloseTrackingBody()
+
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "voice.wav"
             with mock.patch.object(
                 self.module,
                 "local_tts_request",
-                side_effect=error.HTTPError(
+                side_effect=self.module.error.HTTPError(
                     self.module.DEFAULT_TTS_URL,
                     500,
                     "boom",
                     hdrs=None,
-                    fp=None,
+                    fp=response_body,
                 ),
             ):
-                self.assertFalse(self.module.synthesize_to_file("text", path))
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always", ResourceWarning)
+                    self.assertFalse(self.module.synthesize_to_file("text", path))
 
             self.assertFalse(path.exists())
+            self.assertTrue(response_body.closed)
+            resource_warnings = [
+                warning for warning in caught if issubclass(warning.category, ResourceWarning)
+            ]
+            self.assertEqual(resource_warnings, [])
 
     def test_notify_voice_uses_tts_url_for_cache_key(self):
         with tempfile.TemporaryDirectory() as tmp, \
@@ -450,38 +585,23 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(synthesize_to_file.call_args.args, ("完了しました。", expected_path))
 
-    def test_extract_model_text_reads_first_choice_content(self):
-        response = {
-            "choices": [
-                {
-                    "message": {
-                        "content": "完了しました。"
-                    }
-                }
-            ]
-        }
-        self.assertEqual(self.module.extract_model_text(response), "完了しました。")
+    def test_notify_voice_continues_when_debug_log_write_fails(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+             mock.patch.object(self.module, "polish_text", return_value="完了しました。"), \
+             mock.patch.object(self.module, "synthesize_to_file", return_value=True), \
+             mock.patch.object(self.module, "play_audio", return_value=True), \
+             mock.patch.object(
+                 self.module,
+                 "append_debug_log",
+                 side_effect=OSError("disk full"),
+                 create=True,
+             ) as append_debug_log:
+            self.assertEqual(self.module.notify_voice("summary", "body"), 0)
 
-    def test_extract_model_text_falls_back_for_missing_content(self):
-        self.assertEqual(self.module.extract_model_text({}), self.module.FALLBACK_TEXT)
+        self.assertGreaterEqual(append_debug_log.call_count, 1)
 
-    def test_polish_text_uses_fallback_without_github_token(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
-
-    def test_polish_text_uses_response_from_github_models(self):
-        payload = json.dumps(
-            {
-                "choices": [
-                    {
-                        "message": {
-                            "content": "完了しました。"
-                        }
-                    }
-                ]
-            }
-        ).encode("utf-8")
-
+    def test_polish_text_uses_stdout_from_openai_responses(self):
         class FakeResponse:
             status = 200
 
@@ -492,24 +612,59 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 return False
 
             def read(self):
-                return payload
+                return json.dumps({"output_text": "完了しました。"}).encode("utf-8")
 
-        with mock.patch.dict(
-            os.environ,
-            {
-                "GITHUB_TOKEN": "token",
-                "NOTIFY_VOICE_TEXT_MODEL": "gpt-4o-mini",
-            },
-            clear=True,
-        ), mock.patch.object(self.module, "github_models_request", return_value=FakeResponse()) as github_models_request:
-            self.assertEqual(self.module.polish_text("summary", "body"), "完了しました。")
-            request_payload = github_models_request.call_args.args[0]
-            request_body = json.loads(request_payload.decode("utf-8"))
-            self.assertEqual(request_body["model"], "gpt-4o-mini")
+            def getheader(self, name, default=None):
+                if name.lower() == "content-type":
+                    return "application/json"
+                return default
 
-    def test_polish_text_falls_back_for_non_2xx_response(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
+                    self.assertEqual(self.module.polish_text("summary", "body"), "完了しました。")
+
+        req = urlopen.call_args.args[0]
+        self.assertEqual(req.full_url, "http://10.30.254.33:7777/v1/responses")
+        self.assertEqual(req.get_method(), "POST")
+        self.assertEqual(req.get_header("Content-type"), "application/json")
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 5)
+
+    def test_polish_text_uses_cached_text_without_running_openai_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_dir = Path(tmp) / "notify-voice"
+            cache_dir.mkdir()
+            cache_path = self.module.polish_cache_path(
+                cache_dir,
+                self.module.polish_cache_key("summary", "body", "gpt-5-mini"),
+            )
+            cache_path.write_text("完了しました。", encoding="utf-8")
+
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen") as urlopen:
+                self.assertEqual(self.module.polish_text("summary", "body"), "完了しました。")
+
+            urlopen.assert_not_called()
+
+    def test_polish_text_writes_debug_log_for_cache_hit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_dir = Path(tmp) / "notify-voice"
+            cache_dir.mkdir()
+            cache_path = self.module.polish_cache_path(
+                cache_dir,
+                self.module.polish_cache_key("summary", "body", "gpt-5-mini"),
+            )
+            cache_path.write_text("完了しました。", encoding="utf-8")
+
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True):
+                self.assertEqual(self.module.polish_text("summary", "body"), "完了しました。")
+
+            log_text = (cache_dir / "debug.log").read_text(encoding="utf-8")
+            self.assertIn("polish cache hit", log_text)
+
+    def test_polish_text_writes_successful_result_to_cache(self):
         class FakeResponse:
-            status = 500
+            status = 200
 
             def __enter__(self):
                 return self
@@ -518,13 +673,68 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 return False
 
             def read(self):
-                return b'{"error":"boom"}'
+                return json.dumps({"output_text": "完了しました。"}).encode("utf-8")
 
-        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "token"}, clear=True), \
-             mock.patch.object(self.module, "github_models_request", return_value=FakeResponse()):
-            self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+            def getheader(self, name, default=None):
+                if name.lower() == "content-type":
+                    return "application/json"
+                return default
 
-    def test_polish_text_falls_back_for_invalid_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
+                self.assertEqual(self.module.polish_text("summary", "body"), "完了しました。")
+
+            cache_path = self.module.polish_cache_path(
+                self.module.cache_dir({"XDG_CACHE_HOME": tmp}),
+                self.module.polish_cache_key("summary", "body", "gpt-5-mini"),
+            )
+            self.assertEqual(cache_path.read_text(encoding="utf-8"), "完了しました。")
+
+    def test_polish_text_writes_debug_log_for_openai_success(self):
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def read(self):
+                return json.dumps({"output_text": "完了しました。"}).encode("utf-8")
+
+            def getheader(self, name, default=None):
+                return "application/json"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
+                self.assertEqual(self.module.polish_text("summary", "body"), "完了しました。")
+
+            log_text = (Path(tmp) / "notify-voice" / "debug.log").read_text(encoding="utf-8")
+            self.assertIn("openai success", log_text)
+            self.assertIn('model="gpt-5-mini"', log_text)
+
+    def test_polish_text_does_not_cache_fallback_after_openai_timeout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
+                self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+
+            cache_path = self.module.polish_cache_path(
+                self.module.cache_dir({"XDG_CACHE_HOME": tmp}),
+                self.module.polish_cache_key("summary", "body", "gpt-5-mini"),
+            )
+            self.assertFalse(cache_path.exists())
+
+    def test_polish_text_falls_back_when_openai_times_out(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
+                self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+
+    def test_polish_text_falls_back_when_openai_returns_invalid_json(self):
         class FakeResponse:
             status = 200
 
@@ -537,24 +747,22 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             def read(self):
                 return b"not-json"
 
-        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "token"}, clear=True), \
-             mock.patch.object(self.module, "github_models_request", return_value=FakeResponse()):
-            self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+            def getheader(self, name, default=None):
+                return "application/json"
 
-    def test_polish_text_falls_back_for_http_error(self):
-        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "token"}, clear=True), \
-             mock.patch.object(
-                 self.module,
-                 "github_models_request",
-                 side_effect=error.HTTPError(
-                     self.module.GITHUB_MODELS_URL,
-                     500,
-                     "boom",
-                     hdrs=None,
-                     fp=None,
-                 ),
-              ):
-            self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
+                self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+
+    def test_polish_text_writes_debug_log_for_openai_timeout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}, clear=True), \
+                 mock.patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
+                self.assertEqual(self.module.polish_text("summary", "body"), self.module.FALLBACK_TEXT)
+
+            log_text = (Path(tmp) / "notify-voice" / "debug.log").read_text(encoding="utf-8")
+            self.assertIn("openai timeout", log_text)
 
 
 class StubCommandTestCase(unittest.TestCase):
