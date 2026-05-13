@@ -182,14 +182,14 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
         self.assertIn("決まり文句", prompt)
 
     def test_openai_timeout_seconds_uses_default_for_invalid_values(self):
-        self.assertEqual(self.module.openai_timeout_seconds({}), 5)
+        self.assertEqual(self.module.openai_timeout_seconds({}), 15)
         self.assertEqual(
             self.module.openai_timeout_seconds({"NOTIFY_VOICE_OPENAI_TIMEOUT": "abc"}),
-            5,
+            15,
         )
         self.assertEqual(
             self.module.openai_timeout_seconds({"NOTIFY_VOICE_OPENAI_TIMEOUT": "0"}),
-            5,
+            15,
         )
         self.assertEqual(
             self.module.openai_timeout_seconds({"NOTIFY_VOICE_OPENAI_TIMEOUT": "7"}),
@@ -687,7 +687,7 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
         self.assertEqual(req.full_url, "http://10.30.254.33:7777/v1/responses")
         self.assertEqual(req.get_method(), "POST")
         self.assertEqual(req.get_header("Content-type"), "application/json")
-        self.assertEqual(urlopen.call_args.kwargs["timeout"], 5)
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 15)
 
     def test_polish_text_uses_cached_text_without_running_openai_request(self):
         with tempfile.TemporaryDirectory() as tmp:
