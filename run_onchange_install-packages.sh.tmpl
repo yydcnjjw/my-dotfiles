@@ -45,7 +45,6 @@ PACKAGES=(
     "alacritty"
     "wl-clipboard"
     "xorg-xwayland"
-    "polkit-gnome"
 
     "waybar"
     "fuzzel"
@@ -62,6 +61,7 @@ PACKAGES=(
     "swayidle"
     "swaylock"
     "xdg-desktop-portal-wlr"
+    "polkit-gnome"
     {{- end }}
 
     {{- if .install_hyprland }}
@@ -69,6 +69,7 @@ PACKAGES=(
     "hypridle"
     "hyprlock"
     "xdg-desktop-portal-hyprland"
+    "hyprpolkitagent"
     {{- end }}
 
     # network tools
