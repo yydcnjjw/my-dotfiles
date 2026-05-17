@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if ! command -v hyprsunset >/dev/null 2>&1; then
+    exit 0
+fi
+
+if pgrep -x hyprsunset >/dev/null 2>&1; then
+    pkill -x hyprsunset
+else
+    hyprsunset >/dev/null 2>&1 &
+fi

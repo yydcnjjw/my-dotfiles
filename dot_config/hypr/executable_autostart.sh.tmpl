@@ -24,6 +24,11 @@ if command -v mako >/dev/null 2>&1; then
     mako &
 fi
 
+# hyprsunset
+if command -v hyprsunset >/dev/null 2>&1 && ! pgrep -x hyprsunset >/dev/null 2>&1; then
+    hyprsunset &
+fi
+
 # polkit agent
 QT_QPA_PLATFORMTHEME=hyprqt6engine /usr/lib/hyprpolkitagent/hyprpolkitagent &
 
