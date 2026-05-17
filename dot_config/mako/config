@@ -1,14 +1,14 @@
 font=monospace 10
 layer=overlay
 anchor=top-right
-border-size=2
-border-color=#3b8eea
-background-color=#1e1e1e
-text-color=#cccccc
+border-size=1
+border-color=#3a3e45
+background-color=#14161a
+text-color=#e7e7e7
 width=300
 height=100
-margin=10
-padding=10
+margin=12
+padding=12
 default-timeout=5000
 sort=-time
 
@@ -16,6 +16,6 @@ sort=-time
 format=<b>%s</b>\n%b\n\n<i>%a</i>
 
 [urgency=critical]
-border-color=#ff5555
+border-color=#ff6b6b
 default-timeout=0
 ignore-timeout=1
