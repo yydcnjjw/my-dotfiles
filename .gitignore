@@ -1,8 +1,13 @@
-
-# Gemini agent generated docs
-/docs/superpowers/
+### Gemini ###
 /.gemini/
 /.gemini_tasks.md
 
+### OpenCode ###
 /.opencode
+
+### Git ###
 /.worktrees/
+
+# Superpowers #
+/docs/superpowers/
+/.superpowers/
