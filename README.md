@@ -90,7 +90,7 @@ Codex, Gemini, and OpenCode notification hooks use the same routing rule directl
 
 `local-notify` can play a short Japanese voice message before showing the text notification. The voice is generated on the machine that displays the notification, so `remote-notify` automatically plays audio on the destination desktop host.
 
-Voice support uses `notify-voice`, an OpenAI-compatible HTTP API, and a local HTTP TTS service. `notify-voice` sends the text-polish request to `http://10.30.254.33:7777/v1/responses` by default with model `gpt-5-mini`. The TTS request defaults to `http://localhost:8000/tts` and sends `{"text": "...", "lang": "Japanese", "translate": false}`. If the OpenAI-compatible request fails, the spoken fallback is `通知があります`.
+Voice support uses `notify-voice`, an OpenAI-compatible HTTP API, and a local HTTP TTS service. `notify-voice` sends the text-polish request to `http://10.30.254.33:7777/v1/chat/completions` by default with model `gpt-5.4-mini`. The TTS request defaults to `http://localhost:8000/tts` and sends `{"text": "...", "lang": "Japanese", "translate": false}`. If the OpenAI-compatible request fails, the spoken fallback is `通知があります`.
 
 `local-notify` still shows the text notification even if `notify-voice` succeeds or fails.
 
@@ -100,7 +100,7 @@ Useful environment variables:
 - `NOTIFY_VOICE_TIMEOUT=20`: maximum seconds `local-notify` waits for voice playback before showing the text notification.
 - `NOTIFY_VOICE_TTS_URL=http://localhost:8000/tts`: local TTS service URL.
 - `NOTIFY_VOICE_OPENAI_BASE_URL=http://10.30.254.33:7777`: OpenAI-compatible API base URL.
-- `NOTIFY_VOICE_OPENAI_MODEL=gpt-5-mini`: OpenAI-compatible model name.
+- `NOTIFY_VOICE_OPENAI_MODEL=gpt-5.4-mini`: OpenAI-compatible model name.
 - `NOTIFY_VOICE_OPENAI_TIMEOUT=5`: seconds to wait for the OpenAI-compatible polish request before falling back.
 
 `notify-voice` now uses two cache layers under `${XDG_CACHE_HOME:-~/.cache}/notify-voice/`: successful OpenAI-compatible text-polish results are cached as `.txt` files keyed by summary, body, and model; generated audio is cached as `wav` files keyed by the final spoken text and TTS URL. The cache keeps at most 50 `wav` files and removes the least recently used audio files first.

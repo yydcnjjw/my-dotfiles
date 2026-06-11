@@ -199,30 +199,35 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
 
     def test_openai_base_url_and_model_use_defaults(self):
         self.assertEqual(self.module.openai_base_url({}), "http://10.30.254.33:7777")
-        self.assertEqual(self.module.openai_model({}), "gpt-5-mini")
+        self.assertEqual(self.module.openai_model({}), "gpt-5.4-mini")
 
-    def test_openai_responses_url_uses_base_url(self):
+    def test_openai_chat_completions_url_uses_base_url(self):
         self.assertEqual(
-            self.module.openai_responses_url({}),
-            "http://10.30.254.33:7777/v1/responses",
+            self.module.openai_chat_completions_url({}),
+            "http://10.30.254.33:7777/v1/chat/completions",
         )
         self.assertEqual(
-            self.module.openai_responses_url({"NOTIFY_VOICE_OPENAI_BASE_URL": "http://example.test/api/"}),
-            "http://example.test/api/v1/responses",
+            self.module.openai_chat_completions_url({"NOTIFY_VOICE_OPENAI_BASE_URL": "http://example.test/api/"}),
+            "http://example.test/api/v1/chat/completions",
         )
 
-    def test_build_openai_responses_request_contains_model_and_input(self):
+    def test_build_openai_chat_completions_request_contains_model_and_message(self):
         payload = json.loads(
-            self.module.build_openai_responses_request(
-                "gpt-5-mini",
+            self.module.build_openai_chat_completions_request(
+                "gpt-5.4-mini",
                 "prompt text",
             ).decode("utf-8")
         )
         self.assertEqual(
             payload,
             {
-                "model": "gpt-5-mini",
-                "input": "prompt text",
+                "model": "gpt-5.4-mini",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "prompt text",
+                    },
+                ],
             },
         )
 
@@ -280,33 +285,43 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
     def test_clean_spoken_text_returns_first_non_empty_line(self):
         self.assertEqual(self.module.clean_spoken_text("完了しました。\n説明"), "完了しました。")
 
-    def test_extract_openai_output_text_prefers_top_level_output_text(self):
+    def test_extract_openai_chat_content_reads_message_content(self):
         payload = {
-            "output_text": "ビルドが完了しました。",
-            "output": [],
+            "choices": [
+                {
+                    "message": {
+                        "content": "ビルドが完了しました。",
+                    }
+                }
+            ],
         }
         self.assertEqual(
-            self.module.extract_openai_output_text(payload),
+            self.module.extract_openai_chat_content(payload),
             "ビルドが完了しました。",
         )
 
-    def test_extract_openai_output_text_falls_back_to_output_content(self):
+    def test_extract_openai_chat_content_joins_multiple_choices(self):
         payload = {
-            "output": [
+            "choices": [
                 {
-                    "content": [
-                        {"type": "output_text", "text": "ビルドが完了しました。"},
-                    ]
-                }
+                    "message": {
+                        "content": "ビルドが完了しました。",
+                    }
+                },
+                {
+                    "message": {
+                        "content": "確認してください。",
+                    }
+                },
             ]
         }
         self.assertEqual(
-            self.module.extract_openai_output_text(payload),
-            "ビルドが完了しました。",
+            self.module.extract_openai_chat_content(payload),
+            "ビルドが完了しました。\n確認してください。",
         )
 
-    def test_extract_openai_output_text_returns_none_when_missing_text(self):
-        self.assertIsNone(self.module.extract_openai_output_text({"output": []}))
+    def test_extract_openai_chat_content_returns_none_when_missing_text(self):
+        self.assertIsNone(self.module.extract_openai_chat_content({"choices": []}))
 
     def test_audio_path_uses_wav_extension(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -661,7 +676,7 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
 
         self.assertGreaterEqual(append_debug_log.call_count, 1)
 
-    def test_polish_text_uses_stdout_from_openai_responses(self):
+    def test_polish_text_uses_stdout_from_openai_chat_completions(self):
         class FakeResponse:
             status = 200
 
@@ -672,7 +687,17 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 return False
 
             def read(self):
-                return json.dumps({"output_text": "完了しました。"}).encode("utf-8")
+                return json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "完了しました。"
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
 
             def getheader(self, name, default=None):
                 if name.lower() == "content-type":
@@ -684,8 +709,9 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                  mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
                     self.assertEqual(self.module.polish_text("summary", "body"), "完了しました。")
 
+        urlopen.assert_called_once()
         req = urlopen.call_args.args[0]
-        self.assertEqual(req.full_url, "http://10.30.254.33:7777/v1/responses")
+        self.assertEqual(req.full_url, "http://10.30.254.33:7777/v1/chat/completions")
         self.assertEqual(req.get_method(), "POST")
         self.assertEqual(req.get_header("Content-type"), "application/json")
         self.assertEqual(urlopen.call_args.kwargs["timeout"], 15)
@@ -696,7 +722,7 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             cache_dir.mkdir()
             cache_path = self.module.polish_cache_path(
                 cache_dir,
-                self.module.polish_cache_key("summary", "body", "gpt-5-mini"),
+                self.module.polish_cache_key("summary", "body", "gpt-5.4-mini"),
             )
             cache_path.write_text("完了しました。", encoding="utf-8")
 
@@ -712,7 +738,7 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             cache_dir.mkdir()
             cache_path = self.module.polish_cache_path(
                 cache_dir,
-                self.module.polish_cache_key("summary", "body", "gpt-5-mini"),
+                self.module.polish_cache_key("summary", "body", "gpt-5.4-mini"),
             )
             cache_path.write_text("完了しました。", encoding="utf-8")
 
@@ -733,7 +759,17 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 return False
 
             def read(self):
-                return json.dumps({"output_text": "完了しました。"}).encode("utf-8")
+                return json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "完了しました。"
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
 
             def getheader(self, name, default=None):
                 if name.lower() == "content-type":
@@ -747,7 +783,7 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
 
             cache_path = self.module.polish_cache_path(
                 self.module.cache_dir({"XDG_CACHE_HOME": tmp}),
-                self.module.polish_cache_key("summary", "body", "gpt-5-mini"),
+                self.module.polish_cache_key("summary", "body", "gpt-5.4-mini"),
             )
             self.assertEqual(cache_path.read_text(encoding="utf-8"), "完了しました。")
 
@@ -762,7 +798,17 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 return False
 
             def read(self):
-                return json.dumps({"output_text": "完了しました。"}).encode("utf-8")
+                return json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "完了しました。"
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
 
             def getheader(self, name, default=None):
                 return "application/json"
@@ -773,8 +819,8 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 self.assertEqual(self.module.polish_text("summary", "body"), "完了しました。")
 
             log_text = (Path(tmp) / "notify-voice" / "debug.log").read_text(encoding="utf-8")
-            self.assertIn("openai success", log_text)
-            self.assertIn('model="gpt-5-mini"', log_text)
+            self.assertIn("openai chat success", log_text)
+            self.assertIn('model="gpt-5.4-mini"', log_text)
 
     def test_polish_text_does_not_cache_fallback_after_openai_timeout(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -792,7 +838,7 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
 
             cache_path = self.module.polish_cache_path(
                 self.module.cache_dir({"XDG_CACHE_HOME": tmp}),
-                self.module.polish_cache_key("summary", "body", "gpt-5-mini"),
+                self.module.polish_cache_key("summary", "body", "gpt-5.4-mini"),
             )
             self.assertFalse(cache_path.exists())
 
@@ -852,7 +898,17 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 return False
 
             def read(self):
-                return json.dumps({"output_text": '  ""  '}).encode("utf-8")
+                return json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": '  ""  '
+                                }
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
 
             def getheader(self, name, default=None):
                 return "application/json"
@@ -896,7 +952,7 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
                 )
 
             log_text = (Path(tmp) / "notify-voice" / "debug.log").read_text(encoding="utf-8")
-            self.assertIn("openai timeout", log_text)
+            self.assertIn("openai chat timeout", log_text)
 
 
 class StubCommandTestCase(unittest.TestCase):

@@ -17,7 +17,7 @@ DEFAULT_TTS_URL = "http://localhost:8000/tts"
 DEFAULT_AUDIO_FORMAT = "wav"
 DEFAULT_OPENAI_TIMEOUT_SECONDS = 15
 DEFAULT_OPENAI_BASE_URL = "http://10.30.254.33:7777"
-DEFAULT_OPENAI_MODEL = "gpt-5-mini"
+DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 FALLBACK_TEXT = "通知があります"
 FALLBACK_TEXTS = [
     "ほら、ちゃんと確認しなさいよ！",
@@ -157,14 +157,19 @@ def openai_timeout_seconds(env=os.environ):
     return timeout if timeout > 0 else DEFAULT_OPENAI_TIMEOUT_SECONDS
 
 
-def openai_responses_url(env=os.environ):
-    return f"{openai_base_url(env)}/v1/responses"
+def openai_chat_completions_url(env=os.environ):
+    return f"{openai_base_url(env)}/v1/chat/completions"
 
 
-def build_openai_responses_request(model, prompt):
+def build_openai_chat_completions_request(model, prompt):
     payload = {
         "model": model,
-        "input": prompt,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
     }
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
@@ -214,29 +219,21 @@ def clean_spoken_text(output):
     return EMPTY_SPOKEN_TEXT
 
 
-def extract_openai_output_text(payload):
-    text = payload.get("output_text")
-    if isinstance(text, str) and text.strip():
-        return text
-
-    output = payload.get("output")
-    if not isinstance(output, list):
+def extract_openai_chat_content(payload):
+    choices = payload.get("choices")
+    if not isinstance(choices, list):
         return None
 
     parts = []
-    for item in output:
-        if not isinstance(item, dict):
+    for choice in choices:
+        if not isinstance(choice, dict):
             continue
-        content = item.get("content")
-        if not isinstance(content, list):
+        message = choice.get("message")
+        if not isinstance(message, dict):
             continue
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            if part.get("type") in {"output_text", "text"}:
-                value = part.get("text")
-                if isinstance(value, str) and value.strip():
-                    parts.append(value)
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            parts.append(content)
 
     if not parts:
         return None
@@ -283,8 +280,8 @@ def polish_text(summary, body):
 
     prompt = build_copilot_prompt(summary, body)
     req = request.Request(
-        openai_responses_url(),
-        data=build_openai_responses_request(model, prompt),
+        openai_chat_completions_url(),
+        data=build_openai_chat_completions_request(model, prompt),
         headers={
             "Content-Type": "application/json",
         },
@@ -295,36 +292,36 @@ def polish_text(summary, body):
         with request.urlopen(req, timeout=openai_timeout_seconds()) as response:
             body_bytes = response.read()
     except error.HTTPError as exc:
-        safe_append_debug_log(directory, f"openai http error status={exc.code}")
+        safe_append_debug_log(directory, f"openai chat http error status={exc.code}")
         print(f"notify-voice: OpenAI API HTTP {exc.code}", file=sys.stderr)
         return select_fallback_text()
     except TimeoutError:
-        safe_append_debug_log(directory, "openai timeout")
+        safe_append_debug_log(directory, "openai chat timeout")
         print("notify-voice: OpenAI API timed out", file=sys.stderr)
         return select_fallback_text()
     except error.URLError as exc:
         if isinstance(exc.reason, TimeoutError):
-            safe_append_debug_log(directory, "openai timeout")
+            safe_append_debug_log(directory, "openai chat timeout")
             print("notify-voice: OpenAI API timed out", file=sys.stderr)
             return select_fallback_text()
-        safe_append_debug_log(directory, "openai request failed")
+        safe_append_debug_log(directory, "openai chat request failed")
         print(f"notify-voice: OpenAI API request failed: {exc.reason}", file=sys.stderr)
         return select_fallback_text()
     except OSError as exc:
-        safe_append_debug_log(directory, "openai os error")
+        safe_append_debug_log(directory, "openai chat os error")
         print(f"notify-voice: OpenAI API failed: {exc}", file=sys.stderr)
         return select_fallback_text()
 
     try:
         payload = json.loads(body_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        safe_append_debug_log(directory, "openai invalid response")
+        safe_append_debug_log(directory, "openai chat invalid response")
         print("notify-voice: OpenAI API returned invalid JSON", file=sys.stderr)
         return select_fallback_text()
 
-    raw_text = extract_openai_output_text(payload)
+    raw_text = extract_openai_chat_content(payload)
     if not raw_text:
-        safe_append_debug_log(directory, "openai invalid response")
+        safe_append_debug_log(directory, "openai chat returned no text")
         print("notify-voice: OpenAI API returned no text", file=sys.stderr)
         return select_fallback_text()
 
@@ -336,7 +333,7 @@ def polish_text(summary, body):
         safe_append_debug_log(directory, "openai returned fallback text")
         return select_fallback_text()
 
-    safe_append_debug_log(directory, f'openai success model="{model}"')
+    safe_append_debug_log(directory, f'openai chat success model="{model}"')
 
     try:
         directory.mkdir(parents=True, exist_ok=True)
