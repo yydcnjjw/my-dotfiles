@@ -84,7 +84,7 @@ remote-notify --host "your-desktop" "deploy complete"
 
 This keeps normal local notifications working while letting the same `notify-send` command route through the remote wrapper when the environment variable is present.
 
-Gemini and OpenCode notification hooks use the same routing rule directly: if `REMOTE_NOTIFY_HOST` is non-empty and `remote-notify` is available they call `remote-notify`, otherwise they call `local-notify`. This avoids relying on interactive shell functions in non-interactive hook processes.
+Codex, Gemini, and OpenCode notification hooks use the same routing rule directly: if `REMOTE_NOTIFY_HOST` is non-empty and `remote-notify` is available they call `remote-notify`, otherwise they call `local-notify`. This avoids relying on interactive shell functions in non-interactive hook processes.
 
 ### Notification Voice
 

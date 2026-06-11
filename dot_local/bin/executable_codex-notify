@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -u
+
+summary=${1:-Codex}
+message=${2:-}
+
+send_notification() {
+  if [ -n "${REMOTE_NOTIFY_HOST:-}" ] && command -v remote-notify >/dev/null 2>&1; then
+    remote-notify -a Codex "$summary" "$message" && return 0
+  fi
+
+  if command -v local-notify >/dev/null 2>&1; then
+    local-notify -a Codex "$summary" "$message" && return 0
+  fi
+
+  printf 'Notification: %s: %s\n' "$summary" "$message"
+  return 0
+}
+
+send_notification

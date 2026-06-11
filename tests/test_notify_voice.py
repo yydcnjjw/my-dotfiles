@@ -17,6 +17,7 @@ SCRIPT = ROOT / "dot_local" / "bin" / "executable_notify-voice"
 LOCAL_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_local-notify"
 REMOTE_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_remote-notify"
 OPENCODE_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_opencode-notify"
+CODEX_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_codex-notify"
 GEMINI_NOTIFY_SCRIPT = ROOT / "dot_gemini" / "executable_notify.sh"
 EXPECTED_FALLBACK_TEXTS = [
     "ほら、ちゃんと確認しなさいよ！",
@@ -1255,6 +1256,98 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
                 ["argc=4", "arg=-a", "arg=OpenCode", "arg=OpenCode - TaskComplete", "arg=Build passed"],
             )
             self.assertFalse(remote_log.exists())
+
+    def test_codex_notify_routes_to_remote_notify_when_host_is_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            remote_log = tmp_path / "remote.log"
+            local_log = tmp_path / "local.log"
+            self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
+            self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
+
+            env = self.build_notify_env(
+                bin_dir,
+                {
+                    "REMOTE_NOTIFY_HOST": "desktop-host",
+                    "TEST_REMOTE_NOTIFY_LOG": str(remote_log),
+                    "TEST_LOCAL_NOTIFY_LOG": str(local_log),
+                },
+            )
+
+            result = subprocess.run(
+                [str(CODEX_NOTIFY_SCRIPT), "Codex", "Task finished"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(remote_log),
+                ["argc=4", "arg=-a", "arg=Codex", "arg=Codex", "arg=Task finished"],
+            )
+            self.assertFalse(local_log.exists())
+
+    def test_codex_notify_routes_to_local_notify_when_host_is_not_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            remote_log = tmp_path / "remote.log"
+            local_log = tmp_path / "local.log"
+            self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
+            self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
+
+            env = self.build_notify_env(
+                bin_dir,
+                {
+                    "TEST_REMOTE_NOTIFY_LOG": str(remote_log),
+                    "TEST_LOCAL_NOTIFY_LOG": str(local_log),
+                },
+            )
+
+            result = subprocess.run(
+                [str(CODEX_NOTIFY_SCRIPT), "Codex", "Task finished"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(local_log),
+                ["argc=4", "arg=-a", "arg=Codex", "arg=Codex", "arg=Task finished"],
+            )
+            self.assertFalse(remote_log.exists())
+
+    def test_codex_notify_prints_fallback_when_no_notifier_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp) / "bin"
+            bin_dir.mkdir()
+
+            env = self.build_notify_env(bin_dir)
+
+            result = subprocess.run(
+                [str(CODEX_NOTIFY_SCRIPT), "Codex", "Task finished"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "Notification: Codex: Task finished\n")
+            self.assertEqual(result.stderr, "")
 
     def write_fake_jq(self, path):
         self.write_stub(
