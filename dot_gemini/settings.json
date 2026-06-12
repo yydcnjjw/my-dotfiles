@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.gemini/notify.sh",
+            "command": "$HOME/.local/bin/gemini-notify",
             "name": "Desktop Notification",
             "description": "通过 remote-notify 或 local-notify 发送 Gemini 通知"
           }

@@ -16,9 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "dot_local" / "bin" / "executable_notify-voice"
 LOCAL_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_local-notify"
 REMOTE_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_remote-notify"
+AGENT_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_agent-notify"
 OPENCODE_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_opencode-notify"
 CODEX_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_codex-notify"
-GEMINI_NOTIFY_SCRIPT = ROOT / "dot_gemini" / "executable_notify.sh"
+GEMINI_NOTIFY_SCRIPT = ROOT / "dot_local" / "bin" / "executable_gemini-notify"
+GEMINI_SETTINGS = ROOT / "dot_gemini" / "settings.json"
 EXPECTED_FALLBACK_TEXTS = [
     "ほら、ちゃんと確認しなさいよ！",
     "ちょっと、早く確認しなさいってば！",
@@ -56,10 +58,14 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
         env = {"HOME": "/tmp/example-home"}
         self.assertEqual(self.module.cache_dir(env), Path("/tmp/example-home/.cache/notify-voice"))
 
-    def test_polish_cache_key_includes_summary_body_and_model(self):
-        first = self.module.polish_cache_key("title", "body", "GPT-5 mini")
-        second = self.module.polish_cache_key("title", "body", "GPT-4.1")
+    def test_polish_cache_key_includes_summary_body_model_base_url_and_prompt_version(self):
+        first = self.module.polish_cache_key("title", "body", "GPT-5 mini", "http://one.test", "v1")
+        second = self.module.polish_cache_key("title", "body", "GPT-4.1", "http://one.test", "v1")
+        third = self.module.polish_cache_key("title", "body", "GPT-5 mini", "http://two.test", "v1")
+        fourth = self.module.polish_cache_key("title", "body", "GPT-5 mini", "http://one.test", "v2")
         self.assertNotEqual(first, second)
+        self.assertNotEqual(first, third)
+        self.assertNotEqual(first, fourth)
         self.assertEqual(len(first), 64)
 
     def test_polish_cache_path_uses_txt_extension(self):
@@ -161,6 +167,31 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             self.assertEqual(remaining_audio[-1], "audio-54.wav")
             self.assertEqual(remaining_text[0], "text-05.txt")
             self.assertEqual(remaining_text[-1], "text-54.txt")
+
+    def test_prune_cache_ignores_files_that_disappear_during_pruning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            for index in range(55):
+                path = directory / f"{index:02d}.wav"
+                path.write_bytes(b"audio")
+                os.utime(path, (index, index))
+
+            original_stat = Path.stat
+            deleted = False
+
+            def stat_with_disappearing_file(path, *args, **kwargs):
+                nonlocal deleted
+                if path.name == "00.wav" and not deleted:
+                    deleted = True
+                    path.unlink()
+                    raise FileNotFoundError(path)
+                return original_stat(path, *args, **kwargs)
+
+            with mock.patch.object(Path, "stat", stat_with_disappearing_file):
+                self.module.prune_cache(directory, max_files=50)
+
+            remaining_audio = sorted(path.name for path in directory.glob("*.wav"))
+            self.assertEqual(len(remaining_audio), 50)
 
     def test_player_command_uses_first_available_builtin_player(self):
         command = self.module.player_command(lambda name: "/usr/bin/mpv" if name == "mpv" else None)
@@ -722,7 +753,13 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             cache_dir.mkdir()
             cache_path = self.module.polish_cache_path(
                 cache_dir,
-                self.module.polish_cache_key("summary", "body", "gpt-5.4-mini"),
+                self.module.polish_cache_key(
+                    "summary",
+                    "body",
+                    "gpt-5.4-mini",
+                    "http://10.30.254.33:7777",
+                    self.module.PROMPT_VERSION,
+                ),
             )
             cache_path.write_text("完了しました。", encoding="utf-8")
 
@@ -738,7 +775,13 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
             cache_dir.mkdir()
             cache_path = self.module.polish_cache_path(
                 cache_dir,
-                self.module.polish_cache_key("summary", "body", "gpt-5.4-mini"),
+                self.module.polish_cache_key(
+                    "summary",
+                    "body",
+                    "gpt-5.4-mini",
+                    "http://10.30.254.33:7777",
+                    self.module.PROMPT_VERSION,
+                ),
             )
             cache_path.write_text("完了しました。", encoding="utf-8")
 
@@ -783,7 +826,13 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
 
             cache_path = self.module.polish_cache_path(
                 self.module.cache_dir({"XDG_CACHE_HOME": tmp}),
-                self.module.polish_cache_key("summary", "body", "gpt-5.4-mini"),
+                self.module.polish_cache_key(
+                    "summary",
+                    "body",
+                    "gpt-5.4-mini",
+                    "http://10.30.254.33:7777",
+                    self.module.PROMPT_VERSION,
+                ),
             )
             self.assertEqual(cache_path.read_text(encoding="utf-8"), "完了しました。")
 
@@ -838,7 +887,13 @@ class NotifyVoicePureLogicTest(unittest.TestCase):
 
             cache_path = self.module.polish_cache_path(
                 self.module.cache_dir({"XDG_CACHE_HOME": tmp}),
-                self.module.polish_cache_key("summary", "body", "gpt-5.4-mini"),
+                self.module.polish_cache_key(
+                    "summary",
+                    "body",
+                    "gpt-5.4-mini",
+                    "http://10.30.254.33:7777",
+                    self.module.PROMPT_VERSION,
+                ),
             )
             self.assertFalse(cache_path.exists())
 
@@ -1189,6 +1244,11 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             env.update(extra_env)
         return env
 
+    def install_agent_notify(self, bin_dir):
+        target = bin_dir / "agent-notify"
+        target.write_text(AGENT_NOTIFY_SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
     def test_remote_notify_passes_arguments_to_remote_local_notify_command(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1240,6 +1300,75 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
                 ],
             )
 
+    def test_agent_notify_routes_to_remote_notify_when_host_is_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            remote_log = tmp_path / "remote.log"
+            local_log = tmp_path / "local.log"
+            self.install_agent_notify(bin_dir)
+            self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
+            self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
+
+            env = self.build_notify_env(
+                bin_dir,
+                {
+                    "REMOTE_NOTIFY_HOST": "desktop-host",
+                    "TEST_REMOTE_NOTIFY_LOG": str(remote_log),
+                    "TEST_LOCAL_NOTIFY_LOG": str(local_log),
+                },
+            )
+
+            result = subprocess.run(
+                [str(AGENT_NOTIFY_SCRIPT), "-a", "Codex", "Build", "Done"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(self.read_log_lines(remote_log), ["argc=4", "arg=-a", "arg=Codex", "arg=Build", "arg=Done"])
+            self.assertFalse(local_log.exists())
+
+    def test_agent_notify_routes_to_local_notify_when_host_is_not_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            remote_log = tmp_path / "remote.log"
+            local_log = tmp_path / "local.log"
+            self.install_agent_notify(bin_dir)
+            self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
+            self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
+
+            env = self.build_notify_env(
+                bin_dir,
+                {
+                    "TEST_REMOTE_NOTIFY_LOG": str(remote_log),
+                    "TEST_LOCAL_NOTIFY_LOG": str(local_log),
+                },
+            )
+
+            result = subprocess.run(
+                [str(AGENT_NOTIFY_SCRIPT), "-a", "Codex", "Build", "Done"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(self.read_log_lines(local_log), ["argc=4", "arg=-a", "arg=Codex", "arg=Build", "arg=Done"])
+            self.assertFalse(remote_log.exists())
+
     def test_opencode_notify_routes_to_remote_notify_when_host_is_set(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1248,6 +1377,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
 
             remote_log = tmp_path / "remote.log"
             local_log = tmp_path / "local.log"
+            self.install_agent_notify(bin_dir)
             self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
             self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
 
@@ -1277,6 +1407,38 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             )
             self.assertFalse(local_log.exists())
 
+    def test_opencode_notify_delegates_to_agent_notify(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            agent_log = tmp_path / "agent.log"
+            self.write_logging_stub(bin_dir / "agent-notify", "TEST_AGENT_NOTIFY_LOG")
+
+            env = self.build_notify_env(
+                bin_dir,
+                {
+                    "TEST_AGENT_NOTIFY_LOG": str(agent_log),
+                },
+            )
+
+            result = subprocess.run(
+                [str(OPENCODE_NOTIFY_SCRIPT), "TaskComplete", "Build passed"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(agent_log),
+                ["argc=4", "arg=-a", "arg=OpenCode", "arg=OpenCode - TaskComplete", "arg=Build passed"],
+            )
+
     def test_opencode_notify_routes_to_local_notify_when_host_is_not_set(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1285,6 +1447,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
 
             remote_log = tmp_path / "remote.log"
             local_log = tmp_path / "local.log"
+            self.install_agent_notify(bin_dir)
             self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
             self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
 
@@ -1321,6 +1484,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
 
             remote_log = tmp_path / "remote.log"
             local_log = tmp_path / "local.log"
+            self.install_agent_notify(bin_dir)
             self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
             self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
 
@@ -1350,6 +1514,38 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             )
             self.assertFalse(local_log.exists())
 
+    def test_codex_notify_delegates_to_agent_notify(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            agent_log = tmp_path / "agent.log"
+            self.write_logging_stub(bin_dir / "agent-notify", "TEST_AGENT_NOTIFY_LOG")
+
+            env = self.build_notify_env(
+                bin_dir,
+                {
+                    "TEST_AGENT_NOTIFY_LOG": str(agent_log),
+                },
+            )
+
+            result = subprocess.run(
+                [str(CODEX_NOTIFY_SCRIPT), "Codex", "Task finished"],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(agent_log),
+                ["argc=4", "arg=-a", "arg=Codex", "arg=Codex", "arg=Task finished"],
+            )
+
     def test_codex_notify_routes_to_local_notify_when_host_is_not_set(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1358,6 +1554,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
 
             remote_log = tmp_path / "remote.log"
             local_log = tmp_path / "local.log"
+            self.install_agent_notify(bin_dir)
             self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
             self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
 
@@ -1390,6 +1587,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             bin_dir = Path(tmp) / "bin"
             bin_dir.mkdir()
+            self.install_agent_notify(bin_dir)
 
             env = self.build_notify_env(bin_dir)
 
@@ -1415,6 +1613,15 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             "args = sys.argv[1:]\n"
             "expr = args[-1]\n"
             "data = json.load(sys.stdin)\n"
+            "if '@tsv' in expr:\n"
+            "    event = data.get('notification_type') or 'Notification'\n"
+            "    message = data.get('message') or 'No message provided'\n"
+            "    details = data.get('details') or {}\n"
+            "    tool_name = details.get('tool_name', '') if isinstance(details, dict) else ''\n"
+            "    if event == 'ToolPermission' and tool_name:\n"
+            "        message = f'{message} ({tool_name})'\n"
+            "    sys.stdout.write(f'{event}\\t{message}')\n"
+            "    raise SystemExit(0)\n"
             "if expr == '.notification_type // \"Notification\"':\n"
             "    value = data.get('notification_type', 'Notification')\n"
             "elif expr == '.message // \"No message provided\"':\n"
@@ -1441,6 +1648,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
 
             remote_log = tmp_path / "remote.log"
             local_log = tmp_path / "local.log"
+            self.install_agent_notify(bin_dir)
             self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
             self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
             self.write_fake_jq(bin_dir / "jq")
@@ -1472,6 +1680,40 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             )
             self.assertFalse(local_log.exists())
 
+    def test_gemini_notify_delegates_to_agent_notify(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            agent_log = tmp_path / "agent.log"
+            self.write_logging_stub(bin_dir / "agent-notify", "TEST_AGENT_NOTIFY_LOG")
+            self.write_fake_jq(bin_dir / "jq")
+
+            env = self.build_notify_env(
+                bin_dir,
+                {
+                    "TEST_AGENT_NOTIFY_LOG": str(agent_log),
+                },
+            )
+
+            result = subprocess.run(
+                [str(GEMINI_NOTIFY_SCRIPT)],
+                input='{"notification_type":"TaskComplete","message":"Build passed"}',
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(agent_log),
+                ["argc=4", "arg=-a", "arg=Gemini", "arg=Gemini - TaskComplete", "arg=Build passed"],
+            )
+
     def test_gemini_notify_routes_to_local_notify_when_host_is_not_set(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1480,6 +1722,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
 
             remote_log = tmp_path / "remote.log"
             local_log = tmp_path / "local.log"
+            self.install_agent_notify(bin_dir)
             self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
             self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
             self.write_fake_jq(bin_dir / "jq")
@@ -1509,6 +1752,44 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
                 ["argc=4", "arg=-a", "arg=Gemini", "arg=Gemini - TaskComplete", "arg=Build passed"],
             )
             self.assertFalse(remote_log.exists())
+
+    def test_gemini_notify_uses_defaults_when_input_is_invalid_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            agent_log = tmp_path / "agent.log"
+            self.write_logging_stub(bin_dir / "agent-notify", "TEST_AGENT_NOTIFY_LOG")
+
+            env = self.build_notify_env(
+                bin_dir,
+                {
+                    "TEST_AGENT_NOTIFY_LOG": str(agent_log),
+                },
+            )
+
+            result = subprocess.run(
+                [str(GEMINI_NOTIFY_SCRIPT)],
+                input='{"notification_type":',
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(agent_log),
+                ["argc=4", "arg=-a", "arg=Gemini", "arg=Gemini - Notification", "arg=No message provided"],
+            )
+
+    def test_gemini_settings_uses_local_bin_notify_hook(self):
+        settings = json.loads(GEMINI_SETTINGS.read_text(encoding="utf-8"))
+        command = settings["hooks"]["Notification"][0]["hooks"][0]["command"]
+        self.assertEqual(command, "$HOME/.local/bin/gemini-notify")
 
 
 if __name__ == "__main__":

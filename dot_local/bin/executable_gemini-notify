@@ -1,0 +1,35 @@
+#!/bin/bash
+
+input=$(cat)
+
+event=Notification
+message="No message provided"
+
+if command -v jq >/dev/null 2>&1; then
+    parsed=$(printf '%s' "$input" | jq -r '
+        def text_or($fallback): if type == "string" and length > 0 then . else $fallback end;
+        . as $root
+        | ($root.notification_type | text_or("Notification")) as $event
+        | ($root.message | text_or("No message provided")) as $message
+        | ($root.details.tool_name? // empty) as $tool_name
+        | [
+            $event,
+            if $event == "ToolPermission" and ($tool_name | type == "string") and ($tool_name | length > 0)
+            then "\($message) (\($tool_name))"
+            else $message
+            end
+          ]
+        | @tsv
+    ' 2>/dev/null || true)
+    if [ -n "$parsed" ]; then
+        IFS="$(printf '\t')" read -r event message <<EOF
+$parsed
+EOF
+        [ -n "$event" ] || event=Notification
+        [ -n "$message" ] || message="No message provided"
+    fi
+fi
+
+summary="Gemini - $event"
+
+exec agent-notify -a Gemini "$summary" "$message"

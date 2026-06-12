@@ -37,6 +37,7 @@ This repo includes two notification helpers:
 
 - `local-notify`: displays a notification on the current machine. On Linux desktops it runs `notify-send` with the active user session bus; on WSL2 it sends a Windows toast notification through PowerShell.
 - `remote-notify`: connects over `SSH` and asks the destination machine to run `local-notify`.
+- `agent-notify`: shared routing helper for non-interactive agent hooks. It sends through `remote-notify` when `REMOTE_NOTIFY_HOST` is set, otherwise it falls back to `local-notify`, then to stdout.
 
 ### Desktop Host Requirements
 
@@ -84,7 +85,7 @@ remote-notify --host "your-desktop" "deploy complete"
 
 This keeps normal local notifications working while letting the same `notify-send` command route through the remote wrapper when the environment variable is present.
 
-Codex, Gemini, and OpenCode notification hooks use the same routing rule directly: if `REMOTE_NOTIFY_HOST` is non-empty and `remote-notify` is available they call `remote-notify`, otherwise they call `local-notify`. This avoids relying on interactive shell functions in non-interactive hook processes.
+Codex, Gemini, and OpenCode notification hooks call `agent-notify`, so their routing behavior stays centralized. This avoids relying on interactive shell functions in non-interactive hook processes.
 
 ### Notification Voice
 
@@ -103,6 +104,6 @@ Useful environment variables:
 - `NOTIFY_VOICE_OPENAI_MODEL=gpt-5.4-mini`: OpenAI-compatible model name.
 - `NOTIFY_VOICE_OPENAI_TIMEOUT=5`: seconds to wait for the OpenAI-compatible polish request before falling back.
 
-`notify-voice` now uses two cache layers under `${XDG_CACHE_HOME:-~/.cache}/notify-voice/`: successful OpenAI-compatible text-polish results are cached as `.txt` files keyed by summary, body, and model; generated audio is cached as `wav` files keyed by the final spoken text and TTS URL. The cache keeps at most 50 `wav` files and removes the least recently used audio files first.
+`notify-voice` now uses two cache layers under `${XDG_CACHE_HOME:-~/.cache}/notify-voice/`: successful OpenAI-compatible text-polish results are cached as `.txt` files keyed by summary, body, model, API base URL, and prompt version; generated audio is cached as `wav` files keyed by the final spoken text and TTS URL. The cache keeps at most 50 `wav` files and removes the least recently used audio files first.
 
 For debugging, `notify-voice` also appends single-line events to `${XDG_CACHE_HOME:-~/.cache}/notify-voice/debug.log`. The log records cache hits and misses, OpenAI-compatible API outcomes, TTS failures, and playback results. When the file grows beyond roughly 1 MB, `notify-voice` keeps only the newest tail before appending more lines. Log write failures are ignored so notifications still continue.

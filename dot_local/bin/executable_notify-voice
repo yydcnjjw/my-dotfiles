@@ -18,6 +18,7 @@ DEFAULT_AUDIO_FORMAT = "wav"
 DEFAULT_OPENAI_TIMEOUT_SECONDS = 15
 DEFAULT_OPENAI_BASE_URL = "http://10.30.254.33:7777"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
+PROMPT_VERSION = "v1"
 FALLBACK_TEXT = "通知があります"
 FALLBACK_TEXTS = [
     "ほら、ちゃんと確認しなさいよ！",
@@ -51,8 +52,8 @@ def audio_path(directory, key):
     return Path(directory) / f"{key}.{DEFAULT_AUDIO_FORMAT}"
 
 
-def polish_cache_key(summary, body, model):
-    payload = "\0".join([summary, body, model])
+def polish_cache_key(summary, body, model, base_url, prompt_version):
+    payload = "\0".join([summary, body, model, base_url, prompt_version])
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -104,16 +105,27 @@ def safe_append_debug_log(directory, message):
 
 def prune_cache(directory, max_files=MAX_CACHE_FILES):
     for suffix in (".wav", ".txt"):
-        files = [
-            path
-            for path in directory.iterdir()
-            if path.is_file() and path.suffix == suffix and not path.name.startswith(".")
-        ]
+        files = []
+        for path in directory.iterdir():
+            try:
+                if path.is_file() and path.suffix == suffix and not path.name.startswith("."):
+                    files.append(path)
+            except OSError:
+                continue
         if len(files) <= max_files:
             continue
-        files.sort(key=lambda path: path.stat().st_mtime)
-        for path in files[: len(files) - max_files]:
-            path.unlink(missing_ok=True)
+        sortable_files = []
+        for path in files:
+            try:
+                sortable_files.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+        sortable_files.sort(key=lambda item: item[0])
+        for _mtime, path in sortable_files[: max(len(sortable_files) - max_files, 0)]:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                continue
 
 
 def player_command(which=shutil.which):
@@ -261,7 +273,11 @@ def is_valid_wav_response(response_body, content_type=None):
 def polish_text(summary, body):
     directory = cache_dir()
     model = openai_model()
-    cache_path = polish_cache_path(directory, polish_cache_key(summary, body, model))
+    base_url = openai_base_url()
+    cache_path = polish_cache_path(
+        directory,
+        polish_cache_key(summary, body, model, base_url, PROMPT_VERSION),
+    )
     safe_append_debug_log(directory, f'polish start model="{model}"')
 
     try:

@@ -1,0 +1,65 @@
+#!/bin/sh
+
+set -u
+
+app_name=
+
+usage() {
+  printf '%s\n' 'Usage: agent-notify [-a app_name] summary [body]' >&2
+  exit 2
+}
+
+require_value() {
+  [ "$#" -ge 2 ] || usage
+  case "$2" in
+    -*) usage ;;
+  esac
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -a|--app-name)
+      require_value "$@"
+      app_name=$2
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      usage
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+[ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage
+
+summary=$1
+message=${2-}
+
+send_notification() {
+  if [ -n "${REMOTE_NOTIFY_HOST:-}" ] && command -v remote-notify >/dev/null 2>&1; then
+    if [ -n "$app_name" ]; then
+      remote-notify -a "$app_name" "$summary" "$message" && return 0
+    else
+      remote-notify "$summary" "$message" && return 0
+    fi
+  fi
+
+  if command -v local-notify >/dev/null 2>&1; then
+    if [ -n "$app_name" ]; then
+      local-notify -a "$app_name" "$summary" "$message" && return 0
+    else
+      local-notify "$summary" "$message" && return 0
+    fi
+  fi
+
+  printf 'Notification: %s: %s\n' "$summary" "$message"
+  return 0
+}
+
+send_notification
