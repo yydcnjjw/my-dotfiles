@@ -41,24 +41,64 @@ done
 summary=$1
 message=${2-}
 
+notification_log_dir() {
+  if [ -n "${XDG_CACHE_HOME:-}" ]; then
+    printf '%s\n' "$XDG_CACHE_HOME/agent-notify"
+  else
+    printf '%s\n' "${HOME:-.}/.cache/agent-notify"
+  fi
+}
+
+log_escape() {
+  printf '%s' "$1" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+log_notification() {
+  route=$1
+  directory=$(notification_log_dir)
+  log_file=$directory/notifications.log
+  timestamp=$(date -Iseconds 2>/dev/null || date '+%Y-%m-%dT%H:%M:%S%z')
+  escaped_app=$(log_escape "$app_name")
+  escaped_summary=$(log_escape "$summary")
+  escaped_message=$(log_escape "$message")
+
+  mkdir -p "$directory" 2>/dev/null || return 0
+  printf '%s route=%s app="%s" summary="%s" message="%s"\n' \
+    "$timestamp" "$route" "$escaped_app" "$escaped_summary" "$escaped_message" \
+    >>"$log_file" 2>/dev/null || true
+}
+
 send_notification() {
   if [ -n "${REMOTE_NOTIFY_HOST:-}" ] && command -v remote-notify >/dev/null 2>&1; then
     if [ -n "$app_name" ]; then
-      remote-notify -a "$app_name" "$summary" "$message" && return 0
+      if remote-notify -a "$app_name" "$summary" "$message"; then
+        log_notification remote
+        return 0
+      fi
     else
-      remote-notify "$summary" "$message" && return 0
+      if remote-notify "$summary" "$message"; then
+        log_notification remote
+        return 0
+      fi
     fi
   fi
 
   if command -v local-notify >/dev/null 2>&1; then
     if [ -n "$app_name" ]; then
-      local-notify -a "$app_name" "$summary" "$message" && return 0
+      if local-notify -a "$app_name" "$summary" "$message"; then
+        log_notification local
+        return 0
+      fi
     else
-      local-notify "$summary" "$message" && return 0
+      if local-notify "$summary" "$message"; then
+        log_notification local
+        return 0
+      fi
     fi
   fi
 
   printf 'Notification: %s: %s\n' "$summary" "$message"
+  log_notification stdout
   return 0
 }
 

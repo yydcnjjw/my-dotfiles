@@ -87,6 +87,10 @@ This keeps normal local notifications working while letting the same `notify-sen
 
 Codex, Gemini, and OpenCode notification hooks call `agent-notify`, so their routing behavior stays centralized. This avoids relying on interactive shell functions in non-interactive hook processes.
 
+### Notification Log
+
+`agent-notify` appends one single-line record for each delivered notification to `${XDG_CACHE_HOME:-~/.cache}/agent-notify/notifications.log`. Each line records the timestamp, selected route (`remote`, `local`, or `stdout`), app name, summary, and message. Log write failures are ignored so notifications still continue.
+
 ### Notification Voice
 
 `local-notify` can play a short Japanese voice message before showing the text notification. The voice is generated on the machine that displays the notification, so `remote-notify` automatically plays audio on the destination desktop host.

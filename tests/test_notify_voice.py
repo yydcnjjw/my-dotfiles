@@ -1249,6 +1249,24 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
         target.write_text(AGENT_NOTIFY_SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
         target.chmod(0o755)
 
+    def codex_payload(self):
+        return json.dumps(
+            {
+                "type": "agent-turn-complete",
+                "thread-id": "019eba7e-3db9-7f62-a54d-2cf942466893",
+                "turn-id": "019ec58d-2691-7981-8489-7ca9c0b5c012",
+                "cwd": "/home/yydcnjjw/.local/share/chezmoi",
+                "client": "codex-tui",
+                "input-messages": [
+                    "codex 通知显示的内容，不容易理解",
+                    "增加通知日志",
+                    "好",
+                ],
+                "last-assistant-message": "已增加通知日志，并已应用到当前机器。",
+            },
+            ensure_ascii=False,
+        )
+
     def test_remote_notify_passes_arguments_to_remote_local_notify_command(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1368,6 +1386,87 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             self.assertEqual(result.stderr, "")
             self.assertEqual(self.read_log_lines(local_log), ["argc=4", "arg=-a", "arg=Codex", "arg=Build", "arg=Done"])
             self.assertFalse(remote_log.exists())
+
+    def test_agent_notify_writes_notification_log_for_each_route(self):
+        cases = [
+            ("remote", True, True),
+            ("local", False, True),
+            ("stdout", False, False),
+        ]
+
+        for expected_route, use_remote_host, install_local_notify in cases:
+            with self.subTest(route=expected_route), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                bin_dir = tmp_path / "bin"
+                bin_dir.mkdir()
+
+                cache_dir = tmp_path / "cache"
+                remote_log = tmp_path / "remote.log"
+                local_log = tmp_path / "local.log"
+                self.write_logging_stub(bin_dir / "remote-notify", "TEST_REMOTE_NOTIFY_LOG")
+                if install_local_notify:
+                    self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
+
+                extra_env = {
+                    "XDG_CACHE_HOME": str(cache_dir),
+                    "TEST_REMOTE_NOTIFY_LOG": str(remote_log),
+                    "TEST_LOCAL_NOTIFY_LOG": str(local_log),
+                }
+                if use_remote_host:
+                    extra_env["REMOTE_NOTIFY_HOST"] = "desktop-host"
+
+                result = subprocess.run(
+                    [str(AGENT_NOTIFY_SCRIPT), "-a", "Codex", "Build", "Done"],
+                    capture_output=True,
+                    text=True,
+                    env=self.build_notify_env(bin_dir, extra_env),
+                    check=False,
+                )
+
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(result.stderr, "")
+                if expected_route == "stdout":
+                    self.assertEqual(result.stdout, "Notification: Build: Done\n")
+                else:
+                    self.assertEqual(result.stdout, "")
+
+                notification_log = cache_dir / "agent-notify" / "notifications.log"
+                lines = self.read_log_lines(notification_log)
+                self.assertEqual(len(lines), 1)
+                self.assertIn(f"route={expected_route}", lines[0])
+                self.assertIn('app="Codex"', lines[0])
+                self.assertIn('summary="Build"', lines[0])
+                self.assertIn('message="Done"', lines[0])
+
+    def test_agent_notify_continues_when_notification_log_write_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            cache_file = tmp_path / "cache-file"
+            cache_file.write_text("not a directory", encoding="utf-8")
+            local_log = tmp_path / "local.log"
+            self.write_logging_stub(bin_dir / "local-notify", "TEST_LOCAL_NOTIFY_LOG")
+
+            result = subprocess.run(
+                [str(AGENT_NOTIFY_SCRIPT), "-a", "Codex", "Build", "Done"],
+                capture_output=True,
+                text=True,
+                env=self.build_notify_env(
+                    bin_dir,
+                    {
+                        "XDG_CACHE_HOME": str(cache_file),
+                        "TEST_LOCAL_NOTIFY_LOG": str(local_log),
+                    },
+                ),
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(self.read_log_lines(local_log), ["argc=4", "arg=-a", "arg=Codex", "arg=Build", "arg=Done"])
 
     def test_opencode_notify_routes_to_remote_notify_when_host_is_set(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1498,7 +1597,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             )
 
             result = subprocess.run(
-                [str(CODEX_NOTIFY_SCRIPT), "Codex", "Task finished"],
+                [str(CODEX_NOTIFY_SCRIPT), self.codex_payload()],
                 capture_output=True,
                 text=True,
                 env=env,
@@ -1510,7 +1609,13 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             self.assertEqual(result.stderr, "")
             self.assertEqual(
                 self.read_log_lines(remote_log),
-                ["argc=4", "arg=-a", "arg=Codex", "arg=Codex", "arg=Task finished"],
+                [
+                    "argc=4",
+                    "arg=-a",
+                    "arg=Codex",
+                    "arg=agent-turn-complete",
+                    "arg=input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。",
+                ],
             )
             self.assertFalse(local_log.exists())
 
@@ -1531,7 +1636,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             )
 
             result = subprocess.run(
-                [str(CODEX_NOTIFY_SCRIPT), "Codex", "Task finished"],
+                [str(CODEX_NOTIFY_SCRIPT), self.codex_payload()],
                 capture_output=True,
                 text=True,
                 env=env,
@@ -1543,7 +1648,96 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             self.assertEqual(result.stderr, "")
             self.assertEqual(
                 self.read_log_lines(agent_log),
-                ["argc=4", "arg=-a", "arg=Codex", "arg=Codex", "arg=Task finished"],
+                [
+                    "argc=4",
+                    "arg=-a",
+                    "arg=Codex",
+                    "arg=agent-turn-complete",
+                    "arg=input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。",
+                ],
+            )
+
+    def test_codex_notify_extracts_essential_fields_from_json_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            agent_log = tmp_path / "agent.log"
+            self.write_logging_stub(bin_dir / "agent-notify", "TEST_AGENT_NOTIFY_LOG")
+
+            result = subprocess.run(
+                [str(CODEX_NOTIFY_SCRIPT), self.codex_payload()],
+                capture_output=True,
+                text=True,
+                env=self.build_notify_env(
+                    bin_dir,
+                    {
+                        "TEST_AGENT_NOTIFY_LOG": str(agent_log),
+                    },
+                ),
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(agent_log),
+                [
+                    "argc=4",
+                    "arg=-a",
+                    "arg=Codex",
+                    "arg=agent-turn-complete",
+                    "arg=input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。",
+                ],
+            )
+
+    def test_codex_notify_uses_jq_for_json_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            agent_log = tmp_path / "agent.log"
+            self.write_logging_stub(bin_dir / "agent-notify", "TEST_AGENT_NOTIFY_LOG")
+            self.write_stub(bin_dir / "python3", "#!/bin/sh\nexit 127\n")
+
+            payload = json.dumps(
+                {
+                    "type": "agent-turn-complete",
+                    "cwd": "/home/yydcnjjw/.local/share/chezmoi",
+                    "input-messages": ["使用 jq 解析"],
+                    "last-assistant-message": "已切换为 jq。",
+                },
+                ensure_ascii=False,
+            )
+
+            result = subprocess.run(
+                [str(CODEX_NOTIFY_SCRIPT), payload],
+                capture_output=True,
+                text=True,
+                env=self.build_notify_env(
+                    bin_dir,
+                    {
+                        "TEST_AGENT_NOTIFY_LOG": str(agent_log),
+                    },
+                ),
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(agent_log),
+                [
+                    "argc=4",
+                    "arg=-a",
+                    "arg=Codex",
+                    "arg=agent-turn-complete",
+                    "arg=input-messages: 使用 jq 解析; last-assistant-message: 已切换为 jq。",
+                ],
             )
 
     def test_codex_notify_routes_to_local_notify_when_host_is_not_set(self):
@@ -1567,7 +1761,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             )
 
             result = subprocess.run(
-                [str(CODEX_NOTIFY_SCRIPT), "Codex", "Task finished"],
+                [str(CODEX_NOTIFY_SCRIPT), self.codex_payload()],
                 capture_output=True,
                 text=True,
                 env=env,
@@ -1579,7 +1773,13 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             self.assertEqual(result.stderr, "")
             self.assertEqual(
                 self.read_log_lines(local_log),
-                ["argc=4", "arg=-a", "arg=Codex", "arg=Codex", "arg=Task finished"],
+                [
+                    "argc=4",
+                    "arg=-a",
+                    "arg=Codex",
+                    "arg=agent-turn-complete",
+                    "arg=input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。",
+                ],
             )
             self.assertFalse(remote_log.exists())
 
@@ -1592,7 +1792,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             env = self.build_notify_env(bin_dir)
 
             result = subprocess.run(
-                [str(CODEX_NOTIFY_SCRIPT), "Codex", "Task finished"],
+                [str(CODEX_NOTIFY_SCRIPT), self.codex_payload()],
                 capture_output=True,
                 text=True,
                 env=env,
@@ -1600,7 +1800,10 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             )
 
             self.assertEqual(result.returncode, 0)
-            self.assertEqual(result.stdout, "Notification: Codex: Task finished\n")
+            self.assertEqual(
+                result.stdout,
+                "Notification: agent-turn-complete: input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。\n",
+            )
             self.assertEqual(result.stderr, "")
 
     def write_fake_jq(self, path):
