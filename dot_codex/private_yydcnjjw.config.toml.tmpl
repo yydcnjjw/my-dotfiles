@@ -1,0 +1,9 @@
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+web_search = "live"
+
+notify = ["{{ .chezmoi.homeDir }}/.local/bin/codex-notify"]
+
+[plugins."superpowers@openai-curated"]
+enabled = true
+

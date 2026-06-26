@@ -19,3 +19,7 @@ format=<b>%s</b>\n%b\n\n<i>%a</i>
 border-color=#ff6b6b
 default-timeout=0
 ignore-timeout=1
+
+[app-name=Codex]
+width=640
+height=420

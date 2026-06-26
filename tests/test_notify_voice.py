@@ -1614,7 +1614,9 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
                     "arg=-a",
                     "arg=Codex",
                     "arg=agent-turn-complete",
-                    "arg=input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。",
+                    "arg=好",
+                    "",
+                    "已增加通知日志，并已应用到当前机器。",
                 ],
             )
             self.assertFalse(local_log.exists())
@@ -1653,7 +1655,9 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
                     "arg=-a",
                     "arg=Codex",
                     "arg=agent-turn-complete",
-                    "arg=input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。",
+                    "arg=好",
+                    "",
+                    "已增加通知日志，并已应用到当前机器。",
                 ],
             )
 
@@ -1689,7 +1693,9 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
                     "arg=-a",
                     "arg=Codex",
                     "arg=agent-turn-complete",
-                    "arg=input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。",
+                    "arg=好",
+                    "",
+                    "已增加通知日志，并已应用到当前机器。",
                 ],
             )
 
@@ -1736,7 +1742,59 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
                     "arg=-a",
                     "arg=Codex",
                     "arg=agent-turn-complete",
-                    "arg=input-messages: 使用 jq 解析; last-assistant-message: 已切换为 jq。",
+                    "arg=使用 jq 解析",
+                    "",
+                    "已切换为 jq。",
+                ],
+            )
+
+    def test_codex_notify_keeps_json_payload_notification_complete_for_mako(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+
+            agent_log = tmp_path / "agent.log"
+            self.write_logging_stub(bin_dir / "agent-notify", "TEST_AGENT_NOTIFY_LOG")
+
+            payload = json.dumps(
+                {
+                    "type": "agent-turn-complete",
+                    "input-messages": [
+                        "first request should not be shown",
+                        "现在通知内容显示不全",
+                    ],
+                    "last-assistant-message": "这是一段很长的 assistant 回复内容，用来验证桌面通知不会继续展示过长正文。",
+                },
+                ensure_ascii=False,
+            )
+
+            result = subprocess.run(
+                [str(CODEX_NOTIFY_SCRIPT), payload],
+                capture_output=True,
+                text=True,
+                env=self.build_notify_env(
+                    bin_dir,
+                    {
+                        "TEST_AGENT_NOTIFY_LOG": str(agent_log),
+                    },
+                ),
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                self.read_log_lines(agent_log),
+                [
+                    "argc=4",
+                    "arg=-a",
+                    "arg=Codex",
+                    "arg=agent-turn-complete",
+                    "arg=现在通知内容显示不全",
+                    "",
+                    "这是一段很长的 assistant 回复内容，用来验证桌面通知不会继续展示过长正文。",
                 ],
             )
 
@@ -1778,7 +1836,9 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
                     "arg=-a",
                     "arg=Codex",
                     "arg=agent-turn-complete",
-                    "arg=input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。",
+                    "arg=好",
+                    "",
+                    "已增加通知日志，并已应用到当前机器。",
                 ],
             )
             self.assertFalse(remote_log.exists())
@@ -1802,7 +1862,7 @@ class NotificationRoutingIntegrationTest(StubCommandTestCase):
             self.assertEqual(result.returncode, 0)
             self.assertEqual(
                 result.stdout,
-                "Notification: agent-turn-complete: input-messages: codex 通知显示的内容，不容易理解 | 增加通知日志 | 好; last-assistant-message: 已增加通知日志，并已应用到当前机器。\n",
+                "Notification: agent-turn-complete: 好\n\n已增加通知日志，并已应用到当前机器。\n",
             )
             self.assertEqual(result.stderr, "")
 

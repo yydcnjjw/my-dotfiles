@@ -10,37 +10,37 @@ message=
 parse_codex_payload() {
   command -v jq >/dev/null 2>&1 || return 1
   printf '%s' "$1" | jq -r '
-    def compact($limit):
+    def clean:
       tostring
       | gsub("\\s+"; " ")
-      | gsub("^\\s+|\\s+$"; "")
-      | if length <= $limit then . else .[0:($limit - 1)] + "..." end;
+      | gsub("^\\s+|\\s+$"; "");
 
     if type != "object" then error("payload must be object") else . end
     | . as $payload
-    | ($payload.type // "Codex" | compact(120)) as $summary
+    | ($payload.type // "Codex" | clean) as $summary
     | (
         if ($payload["input-messages"] | type) == "array" then
           $payload["input-messages"]
-          | map(select(type == "string") | compact(160) | select(. != ""))
-          | join(" | ")
+          | map(select(type == "string") | clean | select(. != ""))
+          | last // ""
         else
           ""
         end
       ) as $input_messages
-    | ($payload["last-assistant-message"] // "" | compact(240)) as $last_assistant_message
+    | ($payload["last-assistant-message"] // "" | clean) as $last_assistant_message
     | [
-        ("input-messages: " + $input_messages),
-        ("last-assistant-message: " + $last_assistant_message)
+        $input_messages,
+        $last_assistant_message
       ]
-    | [$summary, join("; ")]
+    | map(select(. != ""))
+    | [$summary, join("\n\n")]
     | .[]
   ' 2>/dev/null
 }
 
 if parsed=$(parse_codex_payload "$raw_summary"); then
   summary=$(printf '%s\n' "$parsed" | sed -n '1p')
-  message=$(printf '%s\n' "$parsed" | sed -n '2p')
+  message=$(printf '%s\n' "$parsed" | sed '1d')
 fi
 
 exec agent-notify -a Codex "$summary" "$message"
