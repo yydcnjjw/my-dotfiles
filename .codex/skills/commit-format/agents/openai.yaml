@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commit Format"
+  short_description: "Enforce this repository's commit message convention."
+  default_prompt: "Use this repository's history to produce a correctly formatted commit message."

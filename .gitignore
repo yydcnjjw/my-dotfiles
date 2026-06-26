@@ -13,4 +13,6 @@
 /.superpowers/
 
 ### Codex ###
-/.codex/
+/.codex/*
+!/.codex/skills/
+!/.codex/skills/**
