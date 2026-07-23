@@ -65,6 +65,10 @@ if command -v codex >/dev/null 2>&1; then
 
     command codex --profile yydcnjjw "$@"
   }
+
+  codex-remote() {
+    codex --remote unix:// -C "$PWD" "$@"
+  }
 fi
 
 # Auto-start and attach to tmux
